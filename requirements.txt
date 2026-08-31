@@ -1,0 +1,8 @@
+# Python 3.13 / Django 5.2 LTS — cf. architecture-technique-v1.md §3.
+# Testé localement sous Python 3.12 (contrainte de l'environnement de
+# développement) ; aucune API utilisée n'est spécifique à 3.13.
+Django==5.2.*
+djangorestframework==3.18.*
+psycopg[binary]==3.3.*
+argon2-cffi==25.1.*
+PyYAML==6.0.*
