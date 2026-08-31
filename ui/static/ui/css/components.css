@@ -1,0 +1,280 @@
+/*
+ * CORRUX — Composants primitifs du Design System (UI-101).
+ *
+ * Bouton, Champ, Badge, Icône — cf. ux-ui-design-v1.md §4. Toute valeur
+ * visuelle référence exclusivement les tokens de tokens.css (aucune
+ * couleur/taille en dur ici, critère d'acceptation UI-101).
+ */
+
+/* --- Accessibilité : contenu réservé aux lecteurs d'écran ------------- */
+
+.corrux-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Base / typographie globale ------------------------------------- */
+
+.corrux-root {
+  font-family: var(--corrux-font-family-base);
+  color: var(--corrux-color-text-primary);
+  background-color: var(--corrux-color-surface-0);
+  line-height: var(--corrux-line-height-base);
+  font-size: var(--corrux-font-size-body);
+}
+
+.corrux-h1,
+.corrux-h2,
+.corrux-h3 {
+  font-weight: var(--corrux-font-weight-bold);
+  line-height: var(--corrux-line-height-heading);
+  color: var(--corrux-color-text-primary);
+  margin: 0 0 var(--corrux-space-3) 0;
+}
+
+.corrux-h1 {
+  font-size: var(--corrux-font-size-h1);
+}
+.corrux-h2 {
+  font-size: var(--corrux-font-size-h2);
+}
+.corrux-h3 {
+  font-size: var(--corrux-font-size-h3);
+}
+
+.corrux-text-small {
+  font-size: var(--corrux-font-size-small);
+  color: var(--corrux-color-text-muted);
+}
+
+.corrux-text-mono {
+  font-family: var(--corrux-font-family-mono);
+  font-size: var(--corrux-font-size-small);
+}
+
+/* Focus visible générique (navigation clavier) — appliqué à tout élément
+   interactif du Design System, jamais supprimé (outline: none interdit
+   sans remplacement). */
+.corrux-button:focus-visible,
+.corrux-field__input:focus-visible {
+  outline: none;
+  box-shadow: var(--corrux-focus-ring);
+}
+
+/* --- Bouton ----------------------------------------------------------
+   Variantes : primaire / secondaire / tertiaire / danger.
+   États : défaut / hover / disabled / loading (ux-ui-design-v1.md §4). */
+
+.corrux-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--corrux-space-2);
+  font-family: inherit;
+  font-size: var(--corrux-font-size-body);
+  font-weight: var(--corrux-font-weight-medium);
+  line-height: 1;
+  padding: var(--corrux-space-3) var(--corrux-space-4);
+  border-radius: var(--corrux-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.corrux-button:disabled,
+.corrux-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.corrux-button--loading {
+  cursor: progress;
+  position: relative;
+}
+
+.corrux-button__spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--corrux-radius-full);
+  animation: corrux-spin 0.6s linear infinite;
+}
+
+@keyframes corrux-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Primaire */
+.corrux-button--primary {
+  background-color: var(--corrux-color-primary);
+  color: var(--corrux-color-text-on-primary);
+}
+.corrux-button--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--corrux-color-primary-hover);
+}
+.corrux-button--primary:active:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--corrux-color-primary-active);
+}
+
+/* Secondaire */
+.corrux-button--secondary {
+  background-color: var(--corrux-color-surface-0);
+  color: var(--corrux-color-primary);
+  border-color: var(--corrux-color-primary);
+}
+.corrux-button--secondary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--corrux-color-surface-1);
+}
+
+/* Tertiaire (le moins appuyé — pas de bordure) */
+.corrux-button--tertiary {
+  background-color: transparent;
+  color: var(--corrux-color-primary);
+}
+.corrux-button--tertiary:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: var(--corrux-color-surface-1);
+}
+
+/* Danger */
+.corrux-button--danger {
+  background-color: var(--corrux-color-error);
+  color: var(--corrux-color-text-on-primary);
+}
+.corrux-button--danger:hover:not(:disabled):not([aria-disabled="true"]) {
+  background-color: #8f1b12;
+}
+
+/* --- Champ (texte) -----------------------------------------------------
+   Label, aide, erreur inline (ux-ui-design-v1.md §4 : « validation
+   inline (message sous le champ, bordure error/success) »). */
+
+.corrux-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--corrux-space-1);
+  margin-bottom: var(--corrux-space-4);
+}
+
+.corrux-field__label {
+  font-size: var(--corrux-font-size-small);
+  font-weight: var(--corrux-font-weight-medium);
+  color: var(--corrux-color-text-secondary);
+}
+
+.corrux-field__required {
+  color: var(--corrux-color-error);
+  margin-left: var(--corrux-space-1);
+}
+
+.corrux-field__input {
+  font-family: inherit;
+  font-size: var(--corrux-font-size-body);
+  color: var(--corrux-color-text-primary);
+  background-color: var(--corrux-color-surface-0);
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-sm);
+  padding: var(--corrux-space-2) var(--corrux-space-3);
+}
+
+.corrux-field__input:disabled {
+  background-color: var(--corrux-color-surface-1);
+  color: var(--corrux-color-text-muted);
+  cursor: not-allowed;
+}
+
+.corrux-field--error .corrux-field__input {
+  border-color: var(--corrux-color-error);
+}
+
+.corrux-field--success .corrux-field__input {
+  border-color: var(--corrux-color-success);
+}
+
+.corrux-field__message {
+  font-size: var(--corrux-font-size-small);
+}
+
+.corrux-field--error .corrux-field__message {
+  color: var(--corrux-color-error);
+}
+
+.corrux-field--success .corrux-field__message {
+  color: var(--corrux-color-success);
+}
+
+.corrux-field__help {
+  font-size: var(--corrux-font-size-small);
+  color: var(--corrux-color-text-muted);
+}
+
+/* --- Badge (statut) -----------------------------------------------------
+   Un seul composant, jeu de couleurs sémantiques partagé
+   (ux-ui-design-v1.md §4). Le mapping statut -> tonalité appartient aux
+   écrans qui l'utilisent, pas à ce composant générique. */
+
+.corrux-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--corrux-space-1);
+  font-size: var(--corrux-font-size-small);
+  font-weight: var(--corrux-font-weight-medium);
+  padding: 2px var(--corrux-space-2);
+  border-radius: var(--corrux-radius-full);
+  line-height: 1.4;
+}
+
+.corrux-badge--neutral {
+  background-color: var(--corrux-color-surface-2);
+  color: var(--corrux-color-text-secondary);
+}
+.corrux-badge--success {
+  background-color: var(--corrux-color-success-bg);
+  color: var(--corrux-color-success);
+}
+.corrux-badge--warning {
+  background-color: var(--corrux-color-warning-bg);
+  color: var(--corrux-color-warning);
+}
+.corrux-badge--error {
+  background-color: var(--corrux-color-error-bg);
+  color: var(--corrux-color-error);
+}
+.corrux-badge--info {
+  background-color: var(--corrux-color-info-bg);
+  color: var(--corrux-color-info);
+}
+
+/* --- Icône ---------------------------------------------------------------
+   Trait, 24px, un seul style (maquettes-ui-v1-lot1.md, planche
+   Fondations). currentColor : hérite la couleur du contexte (bouton,
+   badge, texte...) sans variante par composant. */
+
+.corrux-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+.corrux-icon--small {
+  width: 16px;
+  height: 16px;
+}

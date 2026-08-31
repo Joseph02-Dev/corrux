@@ -1,0 +1,16 @@
+{% comment %}
+Composant Bouton — variantes primaire/secondaire/tertiaire/danger,
+états défaut/hover(CSS)/disabled/loading. Cf. ux-ui-design-v1.md §4.
+{% endcomment %}
+<button
+  type="{{ type }}"
+  class="corrux-button corrux-button--{{ variant }}{% if loading %} corrux-button--loading{% endif %}"
+  {% if disabled or loading %}disabled aria-disabled="true"{% endif %}
+  {% if loading %}aria-busy="true"{% endif %}
+>
+  {% if loading %}
+    <span class="corrux-button__spinner" aria-hidden="true"></span>
+    <span class="corrux-visually-hidden">Chargement en cours</span>
+  {% endif %}
+  {{ label }}
+</button>

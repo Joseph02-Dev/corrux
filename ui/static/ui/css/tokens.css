@@ -1,0 +1,95 @@
+/*
+ * CORRUX — Tokens du Design System (UI-101).
+ *
+ * Cf. ux-ui-design-v1.md §4 et maquettes-ui-v1-lot1.md (planche
+ * « Fondations »). Source UNIQUE de vérité pour toutes les valeurs
+ * visuelles : aucune couleur, taille de police ou espacement ne doit
+ * être écrit en dur ailleurs que dans ce fichier (critère d'acceptation
+ * UI-101). Tous les autres fichiers CSS du Design System référencent
+ * exclusivement ces variables via var(--corrux-...).
+ *
+ * Pas de mode sombre en V1 (décision verrouillée, ux-ui-design-v1.md
+ * « Décisions UX validées » #4) : un seul jeu de valeurs, pas de media
+ * query prefers-color-scheme.
+ *
+ * Valeurs sans source documentaire exacte, choisies ici et à confirmer
+ * si besoin (transparence, pas une invention silencieuse) :
+ *   - couleur primaire #2954A6 : présente dans maquettes-ui-v1-lot1.md
+ *     mais explicitement marquée « à valider » dans ce même document ;
+ *     reprise ici faute d'alternative documentée.
+ *   - couleurs sémantiques (success/warning/error/info) : la spec nomme
+ *     les 4 catégories sans fournir de valeur hexadécimale ; choisies
+ *     ici pour un contraste AA (~4.5:1) en usage texte sur fond blanc.
+ *   - rayons de bordure : non mentionnés par la spec ; valeurs minimales
+ *     pragmatiques pour que Bouton/Champ/Badge soient rendables.
+ */
+
+:root {
+  /* --- Couleurs neutres (fonds, texte, bordures) ------------------- */
+  --corrux-color-surface-0: #ffffff;
+  --corrux-color-surface-1: #f5f6f8;
+  --corrux-color-surface-2: #e8eaed;
+
+  --corrux-color-text-primary: #1a1d21;
+  --corrux-color-text-secondary: #4b5563;
+  --corrux-color-text-muted: #6b7280;
+  --corrux-color-text-on-primary: #ffffff;
+
+  --corrux-color-border: #d1d5db;
+  --corrux-color-border-strong: #9ca3af;
+
+  /* --- Couleur de marque (primaire) --------------------------------- */
+  --corrux-color-primary: #2954a6;
+  --corrux-color-primary-hover: #1f4080;
+  --corrux-color-primary-active: #17335f;
+
+  /* --- Couleurs sémantiques (fixes, réutilisées à l'identique par
+     tous les modules — ux-ui-design-v1.md §4) ------------------------ */
+  --corrux-color-success: #1e7f4f;
+  --corrux-color-success-bg: #e3f6ec;
+  --corrux-color-warning: #92400e;
+  --corrux-color-warning-bg: #fef3c7;
+  --corrux-color-error: #b42318;
+  --corrux-color-error-bg: #fde8e6;
+  --corrux-color-info: #0b72b9;
+  --corrux-color-info-bg: #e6f4fb;
+
+  /* --- Typographie (police système uniquement — aucune police web
+     externe, cohérent avec le fonctionnement 100% offline de CORRUX) - */
+  --corrux-font-family-base:
+    -apple-system, "Segoe UI", Roboto, sans-serif;
+  --corrux-font-family-mono:
+    ui-monospace, SFMono-Regular, "Cascadia Mono", "Segoe UI Mono", Consolas,
+    monospace;
+
+  --corrux-font-size-h1: 1.75rem; /* 28px — titre page */
+  --corrux-font-size-h2: 1.375rem; /* 22px — titre section */
+  --corrux-font-size-h3: 1.125rem; /* 18px — titre carte/bloc */
+  --corrux-font-size-body: 1rem; /* 16px — corps */
+  --corrux-font-size-small: 0.8125rem; /* 13px — petit texte, métadonnées */
+
+  --corrux-font-weight-regular: 400;
+  --corrux-font-weight-medium: 500;
+  --corrux-font-weight-bold: 700;
+
+  --corrux-line-height-base: 1.5;
+  --corrux-line-height-heading: 1.25;
+
+  /* --- Espacement (échelle base 4/8px, ux-ui-design-v1.md §4) ------- */
+  --corrux-space-1: 4px;
+  --corrux-space-2: 8px;
+  --corrux-space-3: 12px;
+  --corrux-space-4: 16px;
+  --corrux-space-5: 24px;
+  --corrux-space-6: 32px;
+  --corrux-space-8: 48px;
+
+  /* --- Rayons de bordure (non spécifiés par la spec — valeurs
+     d'implémentation minimales) ---------------------------------------- */
+  --corrux-radius-sm: 4px;
+  --corrux-radius-md: 6px;
+  --corrux-radius-full: 999px;
+
+  /* --- Focus visible (accessibilité — navigation clavier) ----------- */
+  --corrux-focus-ring: 0 0 0 3px rgba(41, 84, 166, 0.35);
+}

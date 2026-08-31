@@ -1,0 +1,13 @@
+{% comment %}
+Composant Icône — SVG en ligne (aucune dépendance externe, cohérent
+avec le fonctionnement 100% offline de CORRUX déjà appliqué à la
+typographie). Trait, 24px, un seul style — maquettes-ui-v1-lot1.md.
+Décorative par défaut (aria-hidden) ; porte un rôle "img" + un label
+accessible uniquement si `label` est fourni (icône seule, sans texte
+visible à côté, ex. bouton icône-only).
+{% endcomment %}
+<svg
+  class="corrux-icon{% if small %} corrux-icon--small{% endif %}"
+  viewBox="0 0 24 24"
+  {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true"{% endif %}
+>{% if label %}<title>{{ label }}</title>{% endif %}{{ paths|safe }}</svg>

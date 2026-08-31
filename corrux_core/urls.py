@@ -17,4 +17,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("healthz/", healthz, name="healthz"),
     path("api/auth/", include("core.identity.urls")),
+    path("", include("ui.urls")),
 ]

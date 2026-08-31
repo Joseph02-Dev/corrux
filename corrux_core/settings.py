@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     # Modules métier V1 (squelettes vides, cf. INIT-001)
     "modules.documentation",
     "modules.rh",
+    # Couche présentation (UI-101 : Design System — tokens + composants)
+    "ui",
 ]
 
 MIDDLEWARE = [

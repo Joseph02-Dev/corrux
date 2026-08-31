@@ -1,0 +1,55 @@
+{% load static ui_tags %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CORRUX — Design System</title>
+  <link rel="stylesheet" href="{% static 'ui/css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/css/components.css' %}">
+</head>
+<body class="corrux-root">
+  <main style="max-width: 720px; margin: 0 auto; padding: var(--corrux-space-6);">
+    <h1 class="corrux-h1">Design System CORRUX — UI-101</h1>
+    <p class="corrux-text-small">
+      Page de référence, hors navigation produit. Documente le rendu des
+      tokens et composants primitifs pour les tickets UI suivants.
+    </p>
+
+    <h2 class="corrux-h2">Boutons</h2>
+    {% corrux_button label="Primaire" variant="primary" %}
+    {% corrux_button label="Secondaire" variant="secondary" %}
+    {% corrux_button label="Tertiaire" variant="tertiary" %}
+    {% corrux_button label="Danger" variant="danger" %}
+    {% corrux_button label="Désactivé" variant="primary" disabled=True %}
+    {% corrux_button label="Chargement" variant="primary" loading=True %}
+
+    <h2 class="corrux-h2">Champs</h2>
+    {% corrux_field label="Identifiant" name="username" field_id="showcase-username" required=True help_text="Fourni par votre administrateur." %}
+    {% corrux_field label="Mot de passe" name="password" field_id="showcase-password" input_type="password" error="Identifiant ou mot de passe incorrect." %}
+
+    <h2 class="corrux-h2">Badges</h2>
+    {% corrux_badge label="Actif" tone="success" %}
+    {% corrux_badge label="En attente" tone="warning" %}
+    {% corrux_badge label="Refusé" tone="error" %}
+    {% corrux_badge label="Info" tone="info" %}
+    {% corrux_badge label="Inactif" tone="neutral" %}
+
+    <h2 class="corrux-h2">Icônes</h2>
+    {% corrux_icon name="check" %}
+    {% corrux_icon name="close" %}
+    {% corrux_icon name="chevron-down" %}
+    {% corrux_icon name="search" %}
+    {% corrux_icon name="user" %}
+    {% corrux_icon name="warning" %}
+
+    <h2 class="corrux-h2">Typographie</h2>
+    <p class="corrux-h1">Titre H1</p>
+    <p class="corrux-h2">Titre H2</p>
+    <p class="corrux-h3">Titre H3</p>
+    <p>Corps de texte standard.</p>
+    <p class="corrux-text-small">Petit texte / métadonnées.</p>
+    <p class="corrux-text-mono">identifiant-technique-1234</p>
+  </main>
+</body>
+</html>
