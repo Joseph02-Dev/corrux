@@ -9,5 +9,14 @@ modèles pour que Django les découvre au chargement de l'app.
 
 from core.authz.models import Permission, Role, RolePermission, UserRole  # noqa: F401
 from core.identity.models import User  # noqa: F401
+from core.modules.models import Module, ModuleDependency  # noqa: F401
 
-__all__ = ["User", "Role", "UserRole", "Permission", "RolePermission"]
+__all__ = [
+    "User",
+    "Role",
+    "UserRole",
+    "Permission",
+    "RolePermission",
+    "Module",
+    "ModuleDependency",
+]
