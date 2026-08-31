@@ -84,10 +84,13 @@ ASGI_APPLICATION = "corrux_core.asgi.application"
 
 # --- Base de données ---------------------------------------------------------
 # Un seul connecteur PostgreSQL ; isolation logique par schéma (core /
-# documentation / rh) via le search_path, conformément à §7 de
-# architecture-technique-v1.md. L'isolation par rôle PostgreSQL dédié par
-# module (défense en profondeur, §16) est traitée dans les tickets ultérieurs
-# (packaging / ops), pas en INIT-001.
+# documentation / rh) obtenue en qualifiant explicitement `db_table` sur
+# chaque modèle métier (ex. `"core"."users"`), conformément à §7 de
+# architecture-technique-v1.md. Le search_path reste au défaut PostgreSQL
+# (public) : les apps Django génériques (auth, admin, sessions,
+# contenttypes) restent dans `public`, sans configuration particulière.
+# L'isolation par rôle PostgreSQL dédié par module (défense en profondeur,
+# §16) est traitée dans les tickets ultérieurs (packaging / ops), pas ici.
 
 DATABASES = {
     "default": {
@@ -97,9 +100,6 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD", ""),
         "HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": os.environ.get("DB_PORT", "5432"),
-        "OPTIONS": {
-            "options": "-c search_path=core,documentation,rh,public",
-        },
     }
 }
 
