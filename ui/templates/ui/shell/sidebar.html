@@ -1,0 +1,29 @@
+{% load ui_tags %}
+{% comment %}
+Sidebar — UI-102. `groups` est déjà filtré par get_navigation() (permission
++ état de module) : ce template ne fait aucune vérification de permission,
+il affiche uniquement ce qui lui est fourni. href="#" : aucun écran
+Documentation/RH/Administration n'existe encore (décision signalée,
+non finale).
+{% endcomment %}
+<nav class="corrux-sidebar" aria-label="Navigation principale">
+  {% for group in groups %}
+    <div class="corrux-sidebar__group">
+      <p class="corrux-sidebar__group-label corrux-text-small">{{ group.label }}</p>
+      <ul class="corrux-sidebar__list">
+        {% for item in group.items %}
+          <li>
+            <a
+              href="{{ item.href }}"
+              class="corrux-nav-item{% if item.href == current_path %} corrux-nav-item--active{% endif %}"
+              {% if item.href == current_path %}aria-current="page"{% endif %}
+            >
+              {% corrux_icon name=item.icon small=True %}
+              <span class="corrux-nav-item__label">{{ item.label }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endfor %}
+</nav>

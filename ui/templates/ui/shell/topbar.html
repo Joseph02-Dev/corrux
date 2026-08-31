@@ -1,0 +1,48 @@
+{% load ui_tags %}
+{% comment %}
+Topbar — UI-102. Recherche et notifications désactivées (aria-disabled) :
+aucun backend de recherche ni de notifications n'existe encore — jamais
+présenter une fonctionnalité inexistante comme fonctionnelle. La
+déconnexion, elle, est réellement fonctionnelle (POST /api/auth/logout/,
+endpoint TECH-002 existant).
+{% endcomment %}
+<header class="corrux-topbar">
+  <div class="corrux-topbar__brand">CORRUX</div>
+
+  <div class="corrux-topbar__search" role="search">
+    {% corrux_icon name="search" %}
+    <input
+      type="search"
+      class="corrux-topbar__search-input"
+      placeholder="Recherche (à venir)"
+      disabled
+      aria-disabled="true"
+      aria-label="Recherche globale (non disponible pour le moment)"
+    >
+  </div>
+
+  <div class="corrux-topbar__actions">
+    <button
+      type="button"
+      class="corrux-topbar__icon-button"
+      disabled
+      aria-disabled="true"
+      aria-label="Notifications (non disponible pour le moment)"
+    >
+      {% corrux_icon name="warning" %}
+    </button>
+
+    {% if user %}
+      <div class="corrux-topbar__user-menu">
+        <span class="corrux-topbar__user-name">{{ user.full_name }}</span>
+        <form method="post" action="/api/auth/logout/" class="corrux-topbar__logout-form">
+          {% csrf_token %}
+          <button type="submit" class="corrux-button corrux-button--tertiary">
+            {% corrux_icon name="logout" small=True %}
+            Se déconnecter
+          </button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+</header>

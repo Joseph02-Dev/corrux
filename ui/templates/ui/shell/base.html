@@ -1,0 +1,26 @@
+{% load static ui_tags %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CORRUX{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'ui/css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/css/components.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/css/shell.css' %}">
+</head>
+<body class="corrux-root">
+  <a class="corrux-visually-hidden corrux-skip-link" href="#corrux-main-content">
+    Aller au contenu principal
+  </a>
+
+  {% corrux_topbar %}
+
+  <div class="corrux-shell">
+    {% corrux_sidebar %}
+    <main id="corrux-main-content" class="corrux-shell__content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

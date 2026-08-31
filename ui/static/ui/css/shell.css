@@ -1,0 +1,200 @@
+/*
+ * CORRUX — Shell applicatif (UI-102).
+ *
+ * Topbar (56px) + Sidebar (236px) + zone de contenu — cf.
+ * maquettes-ui-v1-lot1.md, planche « Layout principal ». Fichier séparé
+ * de components.css (agencement/structure vs. primitives réutilisables).
+ * Toute valeur visuelle référence exclusivement les tokens de tokens.css.
+ */
+
+/* --- Lien d'évitement (accessibilité clavier) ------------------------
+   Masqué comme .corrux-visually-hidden par défaut, mais redevient visible
+   au focus clavier (Tab) — un lien d'évitement invisible en permanence
+   serait inutile pour la navigation clavier. */
+.corrux-skip-link:focus {
+  position: fixed;
+  top: var(--corrux-space-2);
+  left: var(--corrux-space-2);
+  width: auto;
+  height: auto;
+  padding: var(--corrux-space-2) var(--corrux-space-3);
+  clip: auto;
+  overflow: visible;
+  white-space: normal;
+  background-color: var(--corrux-color-primary);
+  color: var(--corrux-color-text-on-primary);
+  border-radius: var(--corrux-radius-sm);
+  z-index: 100;
+}
+
+/* --- Topbar ------------------------------------------------------------ */
+
+.corrux-topbar {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--corrux-space-4);
+  padding: 0 var(--corrux-space-4);
+  background-color: var(--corrux-color-surface-0);
+  border-bottom: 1px solid var(--corrux-color-border);
+}
+
+.corrux-topbar__brand {
+  font-weight: var(--corrux-font-weight-bold);
+  font-size: var(--corrux-font-size-h3);
+  color: var(--corrux-color-primary);
+  white-space: nowrap;
+}
+
+.corrux-topbar__search {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-2);
+  flex: 1;
+  max-width: 360px;
+  color: var(--corrux-color-text-muted);
+}
+
+.corrux-topbar__search-input {
+  flex: 1;
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-sm);
+  padding: var(--corrux-space-1) var(--corrux-space-2);
+  font-family: inherit;
+  font-size: var(--corrux-font-size-small);
+  background-color: var(--corrux-color-surface-1);
+  color: var(--corrux-color-text-muted);
+}
+
+.corrux-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-3);
+}
+
+.corrux-topbar__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--corrux-radius-full);
+  background-color: transparent;
+  color: var(--corrux-color-text-secondary);
+  cursor: not-allowed;
+}
+
+.corrux-topbar__user-menu {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-3);
+}
+
+.corrux-topbar__user-name {
+  font-size: var(--corrux-font-size-small);
+  font-weight: var(--corrux-font-weight-medium);
+  color: var(--corrux-color-text-primary);
+}
+
+.corrux-topbar__logout-form {
+  margin: 0;
+}
+
+/* --- Agencement général (Sidebar + contenu) ---------------------------- */
+
+.corrux-shell {
+  display: flex;
+  min-height: calc(100vh - 56px);
+}
+
+.corrux-shell__content {
+  flex: 1;
+  padding: var(--corrux-space-5);
+}
+
+/* --- Sidebar ------------------------------------------------------------ */
+
+.corrux-sidebar {
+  width: 236px;
+  flex-shrink: 0;
+  background-color: var(--corrux-color-surface-1);
+  border-right: 1px solid var(--corrux-color-border);
+  padding: var(--corrux-space-4) 0;
+}
+
+.corrux-sidebar__group {
+  margin-bottom: var(--corrux-space-5);
+}
+
+.corrux-sidebar__group-label {
+  padding: 0 var(--corrux-space-4);
+  margin: 0 0 var(--corrux-space-2) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.corrux-sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.corrux-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-2);
+  padding: var(--corrux-space-2) var(--corrux-space-4);
+  color: var(--corrux-color-text-secondary);
+  text-decoration: none;
+  font-size: var(--corrux-font-size-body);
+}
+
+.corrux-nav-item:hover {
+  background-color: var(--corrux-color-surface-2);
+}
+
+.corrux-nav-item--active {
+  background-color: var(--corrux-color-primary);
+  color: var(--corrux-color-text-on-primary);
+}
+
+/* --- Responsive (tablette) -----------------------------------------------
+   Décision tranchée en audit (non détaillée par la spec, qui la marque
+   elle-même comme "à confirmer en implémentation") : CSS seul, sidebar
+   réduite à un rail d'icônes. Les libellés restent dans le DOM (lecteurs
+   d'écran) mais sont masqués visuellement — même technique que
+   .corrux-visually-hidden, pas de classe conditionnelle (aucun JS). */
+@media (max-width: 900px) {
+  .corrux-sidebar {
+    width: 64px;
+  }
+
+  .corrux-sidebar__group-label span,
+  .corrux-nav-item__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .corrux-sidebar__group-label {
+    padding: 0 var(--corrux-space-2);
+  }
+
+  .corrux-nav-item {
+    justify-content: center;
+    padding: var(--corrux-space-2);
+  }
+
+  .corrux-topbar__search {
+    display: none;
+  }
+}

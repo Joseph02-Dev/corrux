@@ -1,0 +1,21 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CORRUX</title>
+  <link rel="stylesheet" href="{% static 'ui/css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/css/components.css' %}">
+</head>
+<body class="corrux-root">
+  <main style="max-width: 480px; margin: var(--corrux-space-8) auto; padding: 0 var(--corrux-space-4);">
+    <h1 class="corrux-h2">Non connecté</h1>
+    <p>
+      Le shell applicatif n'est affiché qu'aux utilisateurs authentifiés
+      (« Login est hors shell »). L'écran de connexion n'est pas encore
+      implémenté (UI-103).
+    </p>
+  </main>
+</body>
+</html>
