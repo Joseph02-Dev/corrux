@@ -140,3 +140,13 @@ USE_TZ = True
 # --- Fichiers statiques --------------------------------------------------------
 
 STATIC_URL = "static/"
+
+# --- Stockage fichiers générique (TECH-004) --------------------------------
+# Cf. architecture-technique-v1.md §8 : racine unique de stockage.
+# En production, ce sera /var/lib/corrux/storage/ (configuration ops, hors
+# périmètre de ce projet Django) ; par défaut ici un sous-dossier local
+# adapté au développement, surchargeable comme le reste via variable
+# d'environnement.
+CORRUX_STORAGE_ROOT = os.environ.get(
+    "CORRUX_STORAGE_ROOT", str(BASE_DIR / "var" / "storage")
+)
