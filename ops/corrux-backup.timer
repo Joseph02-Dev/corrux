@@ -1,0 +1,14 @@
+# CORRUX — planification de la sauvegarde (§11 : "planification configurable
+# à l'install, ex. quotidienne nocturne"). Valeur ci-dessous = défaut
+# provisoire ; surchargeable par un drop-in systemd généré par corrux-setup.
+
+[Unit]
+Description=Planification de la sauvegarde CORRUX
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+Unit=corrux-backup.service
+
+[Install]
+WantedBy=timers.target

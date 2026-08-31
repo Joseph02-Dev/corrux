@@ -150,3 +150,10 @@ STATIC_URL = "static/"
 CORRUX_STORAGE_ROOT = os.environ.get(
     "CORRUX_STORAGE_ROOT", str(BASE_DIR / "var" / "storage")
 )
+
+# --- Sauvegarde (TECH-009) --------------------------------------------------
+# CORRUX_BACKUP_DESTINATION et CORRUX_BACKUP_GPG_RECIPIENT_KEY_PATH n'ont
+# volontairement aucun défaut ici (lus directement par la commande
+# `run_backup`, cf. core/backup/management/commands/run_backup.py) :
+# aucune valeur par défaut n'a de sens pour un chemin de destination ou une
+# clé de chiffrement — ils doivent être fournis explicitement à l'installation.

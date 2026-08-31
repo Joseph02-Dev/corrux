@@ -1,0 +1,29 @@
+# CORRUX — service de sauvegarde (§11, §11.1).
+# Déclenché par corrux-backup.timer (jamais lancé au boot directement).
+# Chemins et compte système exacts finalisés par le packaging (TECH-043)
+# et l'installation (TECH-012) — valeurs ci-dessous illustratives, cohérentes
+# avec l'architecture (§5 : compte système dédié, pas d'exécution en root).
+
+[Unit]
+Description=CORRUX — sauvegarde planifiée (pg_dump + stockage, chiffrée)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=corrux
+Group=corrux
+# Fournit CORRUX_BACKUP_DESTINATION, CORRUX_BACKUP_GPG_RECIPIENT_KEY_PATH,
+# DB_*, CORRUX_STORAGE_ROOT — généré par corrux-setup (TECH-012).
+EnvironmentFile=/etc/corrux/backup.env
+WorkingDirectory=/opt/corrux
+ExecStart=/opt/corrux/.venv/bin/python manage.py run_backup
+
+# Durcissement systemd standard (défense en profondeur, §16) :
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+# Le point de montage réel du support de sauvegarde (§11.1) doit être
+# ajouté ici par corrux-setup, ex. ReadWritePaths=/mnt/corrux-backup
+# (chemin non fixé par l'architecture — configurable à l'installation).

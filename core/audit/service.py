@@ -13,9 +13,13 @@ from core.identity.models import User
 
 
 def record_audit_event(
-    *, actor: User, action: str, target: str, metadata: dict | None = None
+    *, actor: User | None, action: str, target: str, metadata: dict | None = None
 ) -> AuditLog:
-    """Écrit une entrée d'audit et la retourne (déjà persistée)."""
+    """Écrit une entrée d'audit et la retourne (déjà persistée).
+
+    `actor=None` pour un événement déclenché automatiquement (ex. sauvegarde
+    planifiée par systemd, TECH-009), sans utilisateur interactif.
+    """
     return AuditLog.objects.create(
         actor_user=actor, action=action, target=target, metadata=metadata or {}
     )

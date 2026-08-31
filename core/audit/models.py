@@ -14,12 +14,15 @@ from core.identity.models import User
 
 
 class AuditLog(models.Model):
-    # Pas de NULLABLE marqué au §7 pour actor_user_id ; requis ici car tous
-    # les appelants de TECH-006 disposent d'un acteur identifié (technicien/
-    # administrateur). PROTECT : un enregistrement d'audit ne doit jamais
-    # disparaître silencieusement si le compte utilisateur est supprimé.
+    # Pas de NULLABLE marqué au §7 pour actor_user_id ; requis dans la
+    # majorité des cas (technicien/administrateur identifié). Nullable
+    # depuis TECH-009 : une sauvegarde planifiée par systemd (timer) n'a
+    # aucun utilisateur interactif — correction minimale indispensable,
+    # sans laquelle l'exécution automatisée exigée par TECH-009 ne peut
+    # pas être journalisée du tout. PROTECT conservé : un enregistrement
+    # d'audit ne doit jamais disparaître silencieusement.
     actor_user = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="audit_events"
+        User, on_delete=models.PROTECT, null=True, blank=True, related_name="audit_events"
     )
     action = models.CharField(max_length=100)
     target = models.CharField(max_length=255)
