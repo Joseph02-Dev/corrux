@@ -27,6 +27,15 @@ class User(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # --- Protection anti-bruteforce (TECH-002, architecture-technique-v1.md
+    # §16 : « protection anti-bruteforce sur l'authentification (limitation
+    # de tentatives, verrouillage temporaire) »). Champs absents de la liste
+    # de colonnes du §7 (schéma fonctionnel) car ils relèvent de
+    # l'implémentation du mécanisme de sécurité, pas du domaine métier ;
+    # ajoutés ici car nécessaires à une protection réellement fonctionnelle.
+    failed_login_attempts = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         app_label = "core"
         db_table = '"core"."users"'
