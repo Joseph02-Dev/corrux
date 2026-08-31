@@ -14,3 +14,21 @@ python manage.py create_schemas   # crée les schémas core/documentation/rh
 python manage.py migrate
 python manage.py runserver
 ```
+
+Pour le développement, installer aussi les dépendances de test/lint :
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+## Tests
+
+```bash
+pytest
+```
+
+## Lint
+
+```bash
+ruff check .
+```
