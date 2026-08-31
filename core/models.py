@@ -7,6 +7,7 @@ seul dossier de migrations (core/migrations/) — cf. TECH-001
 modèles pour que Django les découvre au chargement de l'app.
 """
 
+from core.audit.models import AuditLog  # noqa: F401
 from core.authz.models import Permission, Role, RolePermission, UserRole  # noqa: F401
 from core.identity.models import User  # noqa: F401
 from core.modules.models import Module, ModuleDependency  # noqa: F401
@@ -19,4 +20,5 @@ __all__ = [
     "RolePermission",
     "Module",
     "ModuleDependency",
+    "AuditLog",
 ]
