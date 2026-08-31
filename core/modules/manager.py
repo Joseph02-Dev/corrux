@@ -80,6 +80,23 @@ class DependencyError(ModuleManagerError):
         )
 
 
+class ActiveDependentError(ModuleManagerError):
+    """Désactivation refusée : au moins un module dépendant est actif — TECH-007, §14.
+
+    Le message liste explicitement chaque module dépendant actuellement
+    actif, exploitable par la couche appelante.
+    """
+
+    def __init__(self, module_id: str, active_dependents: list[str]):
+        self.module_id = module_id
+        self.active_dependents = active_dependents
+        details = ", ".join(active_dependents)
+        super().__init__(
+            f"Désactivation de « {module_id} » refusée : "
+            f"module(s) dépendant(s) actuellement actif(s) — {details}"
+        )
+
+
 def _version_tuple(version: str) -> tuple[int, int, int]:
     match = _VERSION_TUPLE_RE.match(version)
     if not match:
@@ -149,6 +166,80 @@ def check_dependencies(module: Module, *, for_update: bool = False) -> list[Unsa
             )
             unsatisfied.append(UnsatisfiedDependency(dep_id, constraint, reason))
     return unsatisfied
+
+
+def _active_dependent_ids(module: Module, *, for_update: bool = False) -> list[str]:
+    """Identifiants des modules actuellement ACTIFS qui déclarent dépendre
+    de `module`, via core.module_dependencies (§7) — cette table n'est
+    peuplée qu'à l'activation réussie du dépendant (TECH-006), donc son
+    seul contenu suffit à retrouver qui dépend réellement de `module`.
+
+    Verrouille les lignes Module des dépendants (pas une jointure) — même
+    logique que `check_dependencies(for_update=True)` : verrouiller la
+    ressource dont l'état conditionne la décision, pas une jointure.
+    """
+    dependent_ids = list(
+        ModuleDependency.objects.filter(depends_on_module=module).values_list(
+            "module_id", flat=True
+        )
+    )
+    if not dependent_ids:
+        return []
+    queryset = Module.objects.filter(pk__in=dependent_ids, state=Module.State.ACTIVATED)
+    if for_update:
+        queryset = queryset.select_for_update()
+    return list(queryset.values_list("pk", flat=True))
+
+
+def deactivate_module(module_id: str, actor: User) -> Module:
+    """Désactive un module — §12 étape 5, §14 (règle inverse de l'activation).
+
+    Refuse si au moins un module dépendant est actuellement ACTIVATED
+    (ActiveDependentError, liste explicite). Idempotent : désactiver un
+    module déjà non actif (installed ou deactivated) est un no-op réussi.
+    Ne supprime jamais rien : données, permissions et lignes
+    ModuleDependency restent intactes (§12 : « les données et le schéma
+    DB du module restent intacts »).
+    """
+    module = Module.objects.filter(pk=module_id).first()
+    if module is None:
+        raise ModuleManagerError(f"Module non installé : {module_id!r}")
+
+    if module.state != Module.State.ACTIVATED:
+        return module
+
+    active_dependents = _active_dependent_ids(module)
+    if active_dependents:
+        record_audit_event(
+            actor=actor,
+            action="module.deactivate",
+            target=module_id,
+            metadata={"status": "denied", "active_dependents": active_dependents},
+        )
+        raise ActiveDependentError(module_id, active_dependents)
+
+    with transaction.atomic():
+        # Reverrouille et revérifie sous transaction (protection TOCTOU),
+        # même logique que activate_module().
+        module = Module.objects.select_for_update().get(pk=module_id)
+        if module.state != Module.State.ACTIVATED:
+            return module
+
+        active_dependents = _active_dependent_ids(module, for_update=True)
+        if active_dependents:
+            raise ActiveDependentError(module_id, active_dependents)
+
+        module.state = Module.State.DEACTIVATED
+        module.save(update_fields=["state"])
+
+        record_audit_event(
+            actor=actor,
+            action="module.deactivate",
+            target=module_id,
+            metadata={"status": "success"},
+        )
+
+    return module
 
 
 @transaction.atomic
