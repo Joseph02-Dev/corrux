@@ -1,0 +1,11 @@
+{% comment %}
+Composant LoadingSkeleton — squelette de chargement pour listes/tableaux.
+Cf. maquettes-ui-v1-lot1.md planche 9, ux-ui-design-v1.md §7. Le spinner
+pour une action ponctuelle (bouton en cours) est un état DIFFÉRENT, déjà
+fourni par corrux_button(loading=True) — UI-101, non dupliqué ici.
+{% endcomment %}
+<div class="corrux-loading-skeleton" role="status" aria-label="Chargement en cours">
+  {% for _ in row_range %}
+    <div class="corrux-loading-skeleton__row" aria-hidden="true"></div>
+  {% endfor %}
+</div>

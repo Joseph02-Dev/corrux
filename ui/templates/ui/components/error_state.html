@@ -1,0 +1,14 @@
+{% comment %}
+Composant ErrorState — message explicite + action de reprise optionnelle
+(secondaire). Cf. maquettes-ui-v1-lot1.md planche 9, ux-ui-design-v1.md
+§7 : "message explicite + action de reprise quand pertinent ; jamais une
+erreur technique brute" — le message affiché est celui fourni par
+l'appelant, ce composant ne l'invente ni ne le transforme.
+{% endcomment %}
+{% load ui_tags %}
+<div class="corrux-error-state" role="alert">
+  <p class="corrux-error-state__message">{{ message }}</p>
+  {% if action_label and action_href %}
+    {% corrux_button label=action_label href=action_href variant="secondary" %}
+  {% endif %}
+</div>

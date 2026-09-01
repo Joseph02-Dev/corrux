@@ -1,7 +1,17 @@
 {% comment %}
 Composant Bouton — variantes primaire/secondaire/tertiaire/danger,
 états défaut/hover(CSS)/disabled/loading. Cf. ux-ui-design-v1.md §4.
+Rend un <a> (navigation) si `href` est fourni, sinon un <button>
+(soumission de formulaire) — UI-104.
 {% endcomment %}
+{% if href %}
+<a
+  href="{{ href }}"
+  class="corrux-button corrux-button--{{ variant }}"
+>
+  {{ label }}
+</a>
+{% else %}
 <button
   type="{{ type }}"
   class="corrux-button corrux-button--{{ variant }}{% if loading %} corrux-button--loading{% endif %}"
@@ -14,3 +24,4 @@ Composant Bouton — variantes primaire/secondaire/tertiaire/danger,
   {% endif %}
   {{ label }}
 </button>
+{% endif %}

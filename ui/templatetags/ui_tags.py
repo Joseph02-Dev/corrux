@@ -69,12 +69,19 @@ _ICON_PATHS: dict[str, str] = {
 
 
 @register.inclusion_tag("ui/components/button.html")
-def corrux_button(label, variant="primary", type="button", disabled=False, loading=False):  # noqa: A002
+def corrux_button(
+    label, variant="primary", type="button", disabled=False, loading=False, href=""  # noqa: A002
+):
     """Bouton — variantes primaire/secondaire/tertiaire/danger.
 
     États disabled/loading gérés côté serveur (rendu initial) ; le
     basculement dynamique loading<->défaut appartient au JS d'un écran
     consommateur (hors périmètre UI-101, aucun JS de composant ici).
+
+    `href` (UI-104, rétrocompatible) : si fourni, rend un lien <a> stylé
+    comme un bouton plutôt qu'un <button> — pour les actions de
+    navigation (ex. CTA d'un état vide, « Réessayer » d'un état erreur),
+    par opposition aux soumissions de formulaire.
     """
     if variant not in _BUTTON_VARIANTS:
         raise ValueError(
@@ -86,6 +93,7 @@ def corrux_button(label, variant="primary", type="button", disabled=False, loadi
         "type": type,
         "disabled": disabled,
         "loading": loading,
+        "href": href,
     }
 
 
@@ -154,6 +162,61 @@ def corrux_icon(name, label="", small=False):
             f"corrux_icon: icône inconnue {name!r}, attendu parmi {sorted(_ICON_PATHS)}"
         )
     return {"paths": _ICON_PATHS[name], "label": label, "small": small}
+
+
+# --- États communs (UI-104) ------------------------------------------------
+# Cf. maquettes-ui-v1-lot1.md planche 9, ux-ui-design-v1.md §7. Composants
+# purement présentationnels : aucun ne consulte request.user, les
+# permissions ou l'état des modules — la décision reste au backend
+# (critère explicite du mandat UI-104), ce fichier ne fait qu'afficher ce
+# qu'on lui fournit.
+
+DEFAULT_PERMISSION_DENIED_MESSAGE = "Vous n'avez pas la permission d'accéder à cette page."
+
+
+@register.inclusion_tag("ui/components/loading_skeleton.html")
+def corrux_loading_skeleton(rows=3):
+    """Squelette de chargement pour listes/tableaux.
+
+    Différent du spinner de corrux_button(loading=True) (UI-101, action
+    ponctuelle) — non dupliqué ici, réservé au contenu en cours de
+    chargement (liste, tableau).
+    """
+    return {"row_range": range(rows)}
+
+
+@register.inclusion_tag("ui/components/empty_state.html")
+def corrux_empty_state(message, icon="", action_label="", action_href=""):
+    """État vide — message court + CTA primaire optionnel (navigation).
+
+    Le CTA n'apparaît que si `action_label` ET `action_href` sont fournis
+    ensemble ; jamais un bouton non fonctionnel.
+    """
+    return {
+        "message": message,
+        "icon": icon,
+        "action_label": action_label,
+        "action_href": action_href,
+    }
+
+
+@register.inclusion_tag("ui/components/error_state.html")
+def corrux_error_state(message, action_label="", action_href=""):
+    """État d'erreur — message explicite + action de reprise secondaire
+    optionnelle (navigation, ex. rechargement). Le message affiché est
+    strictement celui fourni par l'appelant : ce composant n'invente ni
+    ne transforme aucun message technique brut."""
+    return {"message": message, "action_label": action_label, "action_href": action_href}
+
+
+@register.inclusion_tag("ui/components/permission_denied.html")
+def corrux_permission_denied(message=DEFAULT_PERMISSION_DENIED_MESSAGE):
+    """Accès refusé — message dédié, SANS action (jamais de CTA).
+
+    Ne consulte aucune permission : affiche uniquement le message fourni
+    (ou le message générique par défaut, qui ne révèle jamais quelle
+    permission précise manque)."""
+    return {"message": message}
 
 
 @register.inclusion_tag("ui/shell/topbar.html", takes_context=True)

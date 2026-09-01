@@ -1,0 +1,12 @@
+{% comment %}
+Composant PermissionDeniedState — message dédié, SANS action.
+Cf. maquettes-ui-v1-lot1.md planche 9 : "message dédié sans action (accès
+refusé)" ; ux-ui-design-v1.md §7 : "message dédié à l'échelle de la
+page/section (pas une redirection muette)". La décision d'autorisation
+reste entièrement du ressort du backend (TECH-003) : ce composant ne
+consulte ni request.user, ni les permissions, ni l'état des modules — il
+affiche uniquement le message qui lui est fourni.
+{% endcomment %}
+<div class="corrux-permission-denied" role="alert">
+  <p class="corrux-permission-denied__message">{{ message }}</p>
+</div>

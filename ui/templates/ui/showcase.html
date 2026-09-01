@@ -50,6 +50,20 @@
     <p>Corps de texte standard.</p>
     <p class="corrux-text-small">Petit texte / métadonnées.</p>
     <p class="corrux-text-mono">identifiant-technique-1234</p>
+
+    <h2 class="corrux-h2">États communs (UI-104)</h2>
+
+    <h3 class="corrux-h3">Loading</h3>
+    {% corrux_loading_skeleton rows=3 %}
+
+    <h3 class="corrux-h3">Empty</h3>
+    {% corrux_empty_state message="Aucun document" icon="folder" action_label="Déposer un document" action_href="#" %}
+
+    <h3 class="corrux-h3">Error</h3>
+    {% corrux_error_state message="Une erreur est survenue." action_label="Réessayer" action_href="#" %}
+
+    <h3 class="corrux-h3">Permission denied</h3>
+    {% corrux_permission_denied %}
   </main>
 </body>
 </html>

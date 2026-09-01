@@ -1,0 +1,14 @@
+{% comment %}
+Composant EmptyState — message court + CTA optionnel (primaire).
+Cf. maquettes-ui-v1-lot1.md planche 9 : "message + CTA (vide)". Aucune
+logique métier : le message et l'action sont entièrement fournis par
+l'écran appelant.
+{% endcomment %}
+{% load ui_tags %}
+<div class="corrux-empty-state">
+  {% if icon %}{% corrux_icon name=icon %}{% endif %}
+  <p class="corrux-empty-state__message">{{ message }}</p>
+  {% if action_label and action_href %}
+    {% corrux_button label=action_label href=action_href variant="primary" %}
+  {% endif %}
+</div>
