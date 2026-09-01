@@ -1,10 +1,14 @@
 {% load ui_tags %}
 {% comment %}
-Topbar — UI-102/UI-105. Recherche et notifications désactivées
-(aria-disabled) : aucun backend de recherche ni de notifications
-n'existe encore — jamais présenter une fonctionnalité inexistante comme
-fonctionnelle. Le menu utilisateur (corrux_user_menu, UI-105) gère seul
-son affichage et l'accès anonyme/authentifié.
+Topbar — UI-102/UI-105/UI-106. Recherche désactivée (aria-disabled) :
+aucun backend de recherche n'existe encore — jamais présenter une
+fonctionnalité inexistante comme fonctionnelle. Notifications (UI-106) :
+icône toujours visible (Lot 1, décision explicite du ticket), panneau
+<details> natif (zéro JS, même patron que corrux_user_menu, UI-105)
+révélant un état vide honnête (corrux_empty_state, UI-104) — jamais de
+donnée simulée, aucun backend, aucun compteur. Le menu utilisateur
+(corrux_user_menu, UI-105) gère seul son affichage et l'accès
+anonyme/authentifié.
 {% endcomment %}
 <header class="corrux-topbar">
   <div class="corrux-topbar__brand">CORRUX</div>
@@ -22,15 +26,14 @@ son affichage et l'accès anonyme/authentifié.
   </div>
 
   <div class="corrux-topbar__actions">
-    <button
-      type="button"
-      class="corrux-topbar__icon-button"
-      disabled
-      aria-disabled="true"
-      aria-label="Notifications (non disponible pour le moment)"
-    >
-      {% corrux_icon name="warning" %}
-    </button>
+    <details class="corrux-notifications">
+      <summary class="corrux-notifications__trigger">
+        {% corrux_icon name="bell" label="Notifications" %}
+      </summary>
+      <div class="corrux-notifications__panel">
+        {% corrux_empty_state message="Aucune notification" %}
+      </div>
+    </details>
 
     {% corrux_user_menu %}
   </div>

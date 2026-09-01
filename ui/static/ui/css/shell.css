@@ -73,18 +73,52 @@
   gap: var(--corrux-space-3);
 }
 
-.corrux-topbar__icon-button {
+/* --- Notifications (UI-106) -----------------------------------------------
+   <details>/<summary> natif — même patron que le menu utilisateur
+   (UI-105), CSS dédié (pas de refactor des règles .corrux-user-menu*
+   existantes, pour ne pas toucher un fichier déjà validé d'un ticket
+   précédent) : légère duplication de la position/élévation du panneau,
+   assumée. */
+
+.corrux-notifications {
+  position: relative;
+}
+
+.corrux-notifications__trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
-  padding: 0;
-  border: none;
+  list-style: none;
+  cursor: pointer;
   border-radius: var(--corrux-radius-full);
-  background-color: transparent;
   color: var(--corrux-color-text-secondary);
-  cursor: not-allowed;
+}
+
+.corrux-notifications__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.corrux-notifications__trigger:hover {
+  background-color: var(--corrux-color-surface-2);
+}
+
+.corrux-notifications__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--corrux-focus-ring);
+}
+
+.corrux-notifications__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--corrux-space-2));
+  width: 260px;
+  background-color: var(--corrux-color-surface-0);
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-md);
+  box-shadow: var(--corrux-shadow-md);
+  z-index: 50;
 }
 
 /* --- Menu utilisateur (UI-105) -------------------------------------------

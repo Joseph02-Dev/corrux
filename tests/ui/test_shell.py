@@ -232,14 +232,19 @@ class TestNonFunctionalControlsAreHonest:
         assert "disabled" in content
         assert 'aria-disabled="true"' in content
 
-    def test_notifications_button_is_disabled(self, active_user):
+    def test_notifications_is_a_static_honest_empty_state_not_a_dead_button(
+        self, active_user
+    ):
+        """UI-106 : la recherche reste un contrôle désactivé (backend
+        inexistant), mais les notifications ne sont plus un bouton mort —
+        elles révèlent un panneau statique honnête (état vide réel, pas
+        une fonctionnalité simulée ni un compteur inventé)."""
         client = _authenticated_client(active_user)
         response = client.get(SHELL_DEMO_URL)
         content = response.content.decode()
-        assert "corrux-topbar__icon-button" in content
-        # Le bouton notifications est le seul <button> désactivé du groupe
-        # d'actions (le bouton de déconnexion, lui, reste actif).
-        assert 'aria-label="Notifications' in content
+        assert "corrux-notifications" in content
+        assert "Aucune notification" in content
+        assert "corrux-topbar__icon-button" not in content  # ancien traitement UI-102 retiré
 
 
 @pytest.mark.django_db
