@@ -7,9 +7,12 @@ core.identity.auth (TECH-002/TECH-008) comme unique autorité.
 
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from core.identity import auth
+from core.identity.models import User
 
 # Provisoire : aucune page d'accueil/tableau de bord réelle n'existe
 # encore (seuls UI-101/UI-102 fournissent des pages, toutes deux des
@@ -88,3 +91,37 @@ def login_page(request):
         "ui/login.html",
         {"error": error, "username": submitted_username, "next": next_param},
     )
+
+
+def profile_page(request):
+    """Mon profil (UI-105) — infos du compte connecté, lecture seule.
+
+    Première page de contenu réel utilisant le shell (shell/base.html) :
+    anonyme -> redirection sûre vers /login/?next=/profil/ (réutilise le
+    mécanisme construit et testé en UI-103, jamais exercé de bout en bout
+    jusqu'ici). N'affiche que des champs déjà existants sur User
+    (TECH-001) — aucun champ inventé.
+    """
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        profile_url = reverse("ui-profile")
+        return HttpResponseRedirect(f"{login_url}?next={profile_url}")
+
+    user = request.corrux_user
+    status_tone = "success" if user.status == User.Status.ACTIVE else "neutral"
+    return render(request, "ui/profile.html", {"status_tone": status_tone})
+
+
+@require_POST
+def logout_action(request):
+    """Déconnexion déclenchée depuis le menu utilisateur (UI-105).
+
+    Réutilise directement core.identity.auth.logout() (TECH-002/TECH-008
+    — même backend, même audit, aucune seconde logique) mais redirige
+    vers /login/ plutôt que de renvoyer du JSON. core.identity.views.
+    LogoutView (API JSON) n'est pas modifiée : elle reste le point
+    d'entrée pour d'autres clients. Critère d'acceptation explicite
+    UI-105 : « déconnexion effective, redirection vers Login ».
+    """
+    auth.logout(request)
+    return HttpResponseRedirect(reverse("ui-login"))

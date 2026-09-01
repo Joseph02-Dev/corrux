@@ -92,4 +92,10 @@
 
   /* --- Focus visible (accessibilité — navigation clavier) ----------- */
   --corrux-focus-ring: 0 0 0 3px rgba(41, 84, 166, 0.35);
+
+  /* --- Élévation (UI-105) --------------------------------------------
+     Absent jusqu'ici : aucun composant ne flottait au-dessus du contenu
+     avant le panneau du menu utilisateur (UserMenu). Un seul niveau,
+     pas de système d'élévation complet (aucun autre consommateur connu). */
+  --corrux-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
 }

@@ -171,14 +171,22 @@ class TestActiveStateMechanism:
 
 @pytest.mark.django_db
 class TestLogoutIntegration:
-    """La déconnexion est réellement fonctionnelle (endpoint TECH-002),
-    pas un simple lien de façade."""
+    """La déconnexion est réellement fonctionnelle.
 
-    def test_logout_form_targets_the_real_endpoint(self, active_user):
+    UI-105 : le formulaire du menu utilisateur cible désormais
+    /deconnexion/ (ui.views.logout_action), pas directement l'API JSON
+    /api/auth/logout/ — nécessaire pour satisfaire le critère
+    d'acceptation explicite UI-105 (« redirection vers Login »), que
+    l'API JSON seule ne peut pas produire. L'API JSON (TECH-002) reste
+    testée indépendamment ci-dessous (toujours fonctionnelle, non
+    modifiée) : les deux points d'entrée réutilisent le même
+    auth.logout()."""
+
+    def test_logout_form_targets_the_ui_logout_action(self, active_user):
         client = _authenticated_client(active_user)
         response = client.get(SHELL_DEMO_URL)
         content = response.content.decode()
-        assert f'action="{LOGOUT_URL}"' in content
+        assert 'action="/deconnexion/"' in content
         assert "csrfmiddlewaretoken" in content
 
     def test_submitting_the_logout_form_actually_clears_the_session(self, active_user):

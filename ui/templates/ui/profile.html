@@ -1,0 +1,22 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Mon profil — CORRUX{% endblock %}
+
+{% block content %}
+  <h1 class="corrux-h1">Mon profil</h1>
+
+  <dl class="corrux-definition-list">
+    <dt>Identifiant</dt>
+    <dd>{{ request.corrux_user.username }}</dd>
+
+    <dt>Nom complet</dt>
+    <dd>{{ request.corrux_user.full_name }}</dd>
+
+    <dt>Statut</dt>
+    <dd>{% corrux_badge label=request.corrux_user.get_status_display tone=status_tone %}</dd>
+
+    <dt>Compte créé le</dt>
+    <dd>{{ request.corrux_user.created_at|date:"d/m/Y" }}</dd>
+  </dl>
+{% endblock %}

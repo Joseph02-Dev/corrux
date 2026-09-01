@@ -1,10 +1,10 @@
 {% load ui_tags %}
 {% comment %}
-Topbar — UI-102. Recherche et notifications désactivées (aria-disabled) :
-aucun backend de recherche ni de notifications n'existe encore — jamais
-présenter une fonctionnalité inexistante comme fonctionnelle. La
-déconnexion, elle, est réellement fonctionnelle (POST /api/auth/logout/,
-endpoint TECH-002 existant).
+Topbar — UI-102/UI-105. Recherche et notifications désactivées
+(aria-disabled) : aucun backend de recherche ni de notifications
+n'existe encore — jamais présenter une fonctionnalité inexistante comme
+fonctionnelle. Le menu utilisateur (corrux_user_menu, UI-105) gère seul
+son affichage et l'accès anonyme/authentifié.
 {% endcomment %}
 <header class="corrux-topbar">
   <div class="corrux-topbar__brand">CORRUX</div>
@@ -32,17 +32,6 @@ endpoint TECH-002 existant).
       {% corrux_icon name="warning" %}
     </button>
 
-    {% if user %}
-      <div class="corrux-topbar__user-menu">
-        <span class="corrux-topbar__user-name">{{ user.full_name }}</span>
-        <form method="post" action="/api/auth/logout/" class="corrux-topbar__logout-form">
-          {% csrf_token %}
-          <button type="submit" class="corrux-button corrux-button--tertiary">
-            {% corrux_icon name="logout" small=True %}
-            Se déconnecter
-          </button>
-        </form>
-      </div>
-    {% endif %}
+    {% corrux_user_menu %}
   </div>
 </header>

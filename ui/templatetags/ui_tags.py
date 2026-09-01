@@ -224,12 +224,15 @@ def corrux_topbar(context):
     """Barre supérieure — marque, recherche (non fonctionnelle),
     notifications (non fonctionnelles), menu utilisateur.
 
-    `request.corrux_user` (TECH-002, via CorruxAuthenticationMiddleware)
-    est la seule source d'identité — jamais une donnée cliente.
+    Propage explicitement `request` dans le contexte rendu : une
+    inclusion tag imbriquée (corrux_user_menu, appelée depuis
+    topbar.html) reçoit un contexte isolé reconstruit par Django — elle
+    n'hérite PAS automatiquement de `request` depuis le contexte parent
+    (vérifié : sans cette ligne, le menu utilisateur disparaît
+    silencieusement, request.get("request") valant None dans le tag
+    imbriqué).
     """
-    request = context.get("request")
-    user = getattr(request, "corrux_user", None) if request is not None else None
-    return {"user": user}
+    return {"request": context.get("request")}
 
 
 @register.inclusion_tag("ui/shell/sidebar.html", takes_context=True)
@@ -240,3 +243,26 @@ def corrux_sidebar(context):
     user = getattr(request, "corrux_user", None) if request is not None else None
     current_path = request.path if request is not None else ""
     return {"groups": get_navigation(user), "current_path": current_path}
+
+
+@register.inclusion_tag("ui/components/user_menu.html", takes_context=True)
+def corrux_user_menu(context):
+    """Menu utilisateur (Mon profil / Se déconnecter) — UI-105.
+
+    <details>/<summary> natif : aucun JavaScript, opérable au clavier par
+    défaut (Entrée/Espace). Ne rend rien si aucun utilisateur authentifié
+    (composant défensif, même si Topbar ne l'appelle qu'en contexte
+    authentifié).
+    """
+    request = context.get("request")
+    user = getattr(request, "corrux_user", None) if request is not None else None
+    if user is None:
+        return {"user": None}
+
+    role_names = ", ".join(
+        user.user_roles.select_related("role")
+        .order_by("role__name")
+        .values_list("role__name", flat=True)
+    )
+    initial = (user.full_name or user.username or "?")[0].upper()
+    return {"user": user, "role_names": role_names, "initial": initial}

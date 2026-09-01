@@ -348,3 +348,26 @@ a.corrux-button {
   font-size: var(--corrux-font-size-body);
   margin: 0;
 }
+
+/* --- Liste de définitions (lecture seule) -----------------------------
+   Pattern générique clé/valeur — introduit pour "Mon profil" (UI-105),
+   réutilisable par toute future fiche en lecture seule (ex. détail
+   employé). */
+
+.corrux-definition-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--corrux-space-2) var(--corrux-space-4);
+  margin: 0;
+}
+
+.corrux-definition-list dt {
+  font-size: var(--corrux-font-size-small);
+  color: var(--corrux-color-text-muted);
+  font-weight: var(--corrux-font-weight-medium);
+}
+
+.corrux-definition-list dd {
+  margin: 0;
+  color: var(--corrux-color-text-primary);
+}

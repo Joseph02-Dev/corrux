@@ -87,19 +87,122 @@
   cursor: not-allowed;
 }
 
-.corrux-topbar__user-menu {
-  display: flex;
-  align-items: center;
-  gap: var(--corrux-space-3);
+/* --- Menu utilisateur (UI-105) -------------------------------------------
+   <details>/<summary> natif. Fermé : avatar+nom+chevron (Topbar).
+   Ouvert : en-tête (avatar/nom/rôles) + liste d'actions. */
+
+.corrux-user-menu {
+  position: relative;
 }
 
-.corrux-topbar__user-name {
+.corrux-user-menu__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-2);
+  list-style: none;
+  cursor: pointer;
+  padding: var(--corrux-space-1) var(--corrux-space-2);
+  border-radius: var(--corrux-radius-sm);
+}
+
+.corrux-user-menu__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.corrux-user-menu__trigger:hover {
+  background-color: var(--corrux-color-surface-2);
+}
+
+.corrux-user-menu__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--corrux-focus-ring);
+}
+
+.corrux-user-menu__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--corrux-radius-full);
+  background-color: var(--corrux-color-primary);
+  color: var(--corrux-color-text-on-primary);
+  font-size: var(--corrux-font-size-small);
+  font-weight: var(--corrux-font-weight-bold);
+}
+
+.corrux-user-menu__avatar--large {
+  width: 40px;
+  height: 40px;
+  font-size: var(--corrux-font-size-body);
+}
+
+.corrux-user-menu__name {
   font-size: var(--corrux-font-size-small);
   font-weight: var(--corrux-font-weight-medium);
   color: var(--corrux-color-text-primary);
 }
 
-.corrux-topbar__logout-form {
+.corrux-user-menu__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--corrux-space-2));
+  width: 220px;
+  background-color: var(--corrux-color-surface-0);
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-md);
+  box-shadow: var(--corrux-shadow-md);
+  padding: var(--corrux-space-3);
+  z-index: 50;
+}
+
+.corrux-user-menu__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--corrux-space-1);
+  text-align: center;
+  padding-bottom: var(--corrux-space-3);
+  margin-bottom: var(--corrux-space-2);
+  border-bottom: 1px solid var(--corrux-color-border);
+}
+
+.corrux-user-menu__header-name {
+  margin: 0;
+  font-weight: var(--corrux-font-weight-medium);
+  color: var(--corrux-color-text-primary);
+}
+
+.corrux-user-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--corrux-space-1);
+}
+
+.corrux-user-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--corrux-space-2);
+  border-radius: var(--corrux-radius-sm);
+  color: var(--corrux-color-text-primary);
+  text-decoration: none;
+  font-size: var(--corrux-font-size-body);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.corrux-user-menu__item:hover {
+  background-color: var(--corrux-color-surface-1);
+}
+
+.corrux-user-menu__logout-form {
   margin: 0;
 }
 

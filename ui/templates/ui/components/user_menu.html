@@ -1,0 +1,38 @@
+{% comment %}
+Composant Menu utilisateur — UI-105. <details>/<summary> natif : aucun
+JavaScript, opérable au clavier nativement (Entrée/Espace). Cf.
+maquettes-ui-v1-lot1.md §7 : fermé = avatar+nom+chevron ; ouvert =
+en-tête (avatar, nom, rôle) + liste d'actions (Mon profil, Se déconnecter).
+{% endcomment %}
+{% load ui_tags %}
+{% if user %}
+<details class="corrux-user-menu">
+  <summary class="corrux-user-menu__trigger">
+    <span class="corrux-user-menu__avatar" aria-hidden="true">{{ initial }}</span>
+    <span class="corrux-user-menu__name">{{ user.full_name }}</span>
+    {% corrux_icon name="chevron-down" small=True %}
+  </summary>
+  <div class="corrux-user-menu__panel">
+    <div class="corrux-user-menu__header">
+      <span class="corrux-user-menu__avatar corrux-user-menu__avatar--large" aria-hidden="true">
+        {{ initial }}
+      </span>
+      <p class="corrux-user-menu__header-name">{{ user.full_name }}</p>
+      {% if role_names %}<p class="corrux-text-small">{{ role_names }}</p>{% endif %}
+    </div>
+    <ul class="corrux-user-menu__list">
+      <li>
+        <a href="{% url 'ui-profile' %}" class="corrux-user-menu__item">Mon profil</a>
+      </li>
+      <li>
+        <form method="post" action="{% url 'ui-logout' %}" class="corrux-user-menu__logout-form">
+          {% csrf_token %}
+          <button type="submit" class="corrux-user-menu__item corrux-user-menu__item--button">
+            Se déconnecter
+          </button>
+        </form>
+      </li>
+    </ul>
+  </div>
+</details>
+{% endif %}
