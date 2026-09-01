@@ -371,3 +371,55 @@ a.corrux-button {
   margin: 0;
   color: var(--corrux-color-text-primary);
 }
+
+/* --- Modal de confirmation destructive (UI-204) -----------------------
+   <dialog> natif : focus trap, focus initial, fermeture Échap et
+   ::backdrop entièrement gérés par le navigateur — ce CSS ne stylise
+   que l'apparence, jamais le comportement. */
+
+.corrux-modal {
+  width: 400px;
+  max-width: calc(100vw - var(--corrux-space-4) * 2);
+  padding: 0;
+  border: none;
+  border-radius: var(--corrux-radius-md);
+  box-shadow: var(--corrux-shadow-md);
+}
+
+.corrux-modal::backdrop {
+  background-color: var(--corrux-backdrop-color);
+}
+
+.corrux-modal__content {
+  padding: var(--corrux-space-5);
+}
+
+.corrux-modal__header {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-2);
+  margin-bottom: var(--corrux-space-3);
+  color: var(--corrux-color-error);
+}
+
+.corrux-modal__title {
+  margin: 0;
+  font-size: var(--corrux-font-size-h3);
+  font-weight: var(--corrux-font-weight-bold);
+  color: var(--corrux-color-text-primary);
+}
+
+.corrux-modal__message {
+  margin: 0 0 var(--corrux-space-5) 0;
+  color: var(--corrux-color-text-secondary);
+}
+
+.corrux-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--corrux-space-2);
+}
+
+.corrux-modal__actions form {
+  margin: 0;
+}

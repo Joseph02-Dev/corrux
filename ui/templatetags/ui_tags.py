@@ -69,6 +69,11 @@ _ICON_PATHS: dict[str, str] = {
         '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>'
         '<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'
     ),
+    "trash": (
+        '<path d="M3 6h18"/>'
+        '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>'
+        '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'
+    ),
 }
 
 
@@ -270,3 +275,49 @@ def corrux_user_menu(context):
     )
     initial = (user.full_name or user.username or "?")[0].upper()
     return {"user": user, "role_names": role_names, "initial": initial}
+
+
+# --- Modal de confirmation destructive (UI-204) -----------------------------
+# <dialog> natif (décision utilisateur explicite, Phase 2/3 UI-204) : focus
+# trap, focus initial, fermeture Échap, aria-modal gérés nativement par le
+# navigateur — aucune réimplémentation manuelle. Ouverture déclenchée à
+# distance via ui/static/ui/js/modal.js (générique, sans logique métier,
+# chargé une seule fois par ui/templates/ui/shell/base.html).
+
+
+@register.inclusion_tag("ui/components/modal.html")
+def corrux_modal(modal_id, title, message, confirm_label, action, cancel_label="Annuler"):
+    """Modal de confirmation destructive — UI-204.
+
+    Réutilisable tel quel par tout écran (ex. UI-201 désactivation de
+    compte, UI-203 désactivation de module) sans variante graphique —
+    seuls les paramètres textuels et l'URL cible changent. Formulaire de
+    confirmation réellement POST, jeton CSRF inclus. Aucune vérification
+    RBAC ici : l'autorisation reste entièrement du ressort du serveur au
+    moment de la soumission du formulaire.
+    """
+    return {
+        "modal_id": modal_id,
+        "title": title,
+        "message": message,
+        "confirm_label": confirm_label,
+        "action": action,
+        "cancel_label": cancel_label,
+    }
+
+
+@register.inclusion_tag("ui/components/modal_trigger.html")
+def corrux_modal_trigger(modal_id, label, variant="secondary"):
+    """Déclencheur générique d'un modal distant (UI-204).
+
+    Réutilise les classes .corrux-button existantes (components.css,
+    UI-101) plutôt qu'un second système de bouton. La liaison au
+    <dialog> correspondant se fait via l'attribut data-modal-target,
+    résolu par le script générique modal.js.
+    """
+    if variant not in _BUTTON_VARIANTS:
+        raise ValueError(
+            f"corrux_modal_trigger: variant invalide {variant!r}, "
+            f"attendu parmi {_BUTTON_VARIANTS}"
+        )
+    return {"modal_id": modal_id, "label": label, "variant": variant}

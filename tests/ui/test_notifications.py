@@ -102,6 +102,11 @@ class TestNotificationsInTopbar:
         assert "corrux-badge" not in notifications_block
 
     def test_disclosure_is_native_details_summary_no_javascript(self, active_user):
+        """Le mécanisme Notifications lui-même n'utilise aucun JavaScript
+        (toujours vrai). La page peut désormais contenir le script
+        générique modal.js (UI-204, décision explicite Option 2) — cette
+        vérification porte donc sur le bloc Notifications précisément,
+        pas sur la page entière."""
         client = _authenticated_client(active_user)
         content = client.get(SHELL_DEMO_URL).content.decode()
 
@@ -109,7 +114,7 @@ class TestNotificationsInTopbar:
             1
         ].split("</details>")[0]
         assert "<summary" in notifications_block
-        assert "<script" not in content  # aucun JavaScript ajouté nulle part
+        assert "<script" not in notifications_block
 
     def test_accessible_name_comes_from_the_icon_label_not_a_redundant_aria(
         self, active_user

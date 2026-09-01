@@ -1,0 +1,39 @@
+{% comment %}
+Composant Modal de confirmation destructive — UI-204. <dialog> natif :
+focus trap, focus initial, fermeture Échap et aria-modal entièrement
+gérés par le navigateur (aucune réimplémentation manuelle). Rôle
+"dialog" explicite conservé en défense en profondeur (historique
+d'incohérences de support du rôle implicite selon navigateur/lecteur
+d'écran) — pas un ARIA artificiel, la sémantique réelle est bien celle
+d'un dialogue natif. Un seul composant, aucune variante graphique
+(maquettes-ui-v1-lot2.md §9).
+{% endcomment %}
+{% load ui_tags %}
+<dialog
+  id="{{ modal_id }}"
+  class="corrux-modal"
+  role="dialog"
+  aria-labelledby="{{ modal_id }}-title"
+  aria-describedby="{{ modal_id }}-message"
+>
+  <div class="corrux-modal__content">
+    <div class="corrux-modal__header">
+      {% corrux_icon name="trash" %}
+      <h2 id="{{ modal_id }}-title" class="corrux-modal__title">{{ title }}</h2>
+    </div>
+    <p id="{{ modal_id }}-message" class="corrux-modal__message">{{ message }}</p>
+    <div class="corrux-modal__actions">
+      {% comment %}
+      method="dialog" : fermeture native, aucune requête réseau, donc
+      aucun jeton CSRF pertinent ici.
+      {% endcomment %}
+      <form method="dialog">
+        {% corrux_button label=cancel_label variant="secondary" type="submit" %}
+      </form>
+      <form method="post" action="{{ action }}" class="corrux-modal__confirm-form">
+        {% csrf_token %}
+        {% corrux_button label=confirm_label variant="danger" type="submit" %}
+      </form>
+    </div>
+  </div>
+</dialog>

@@ -98,4 +98,10 @@
      avant le panneau du menu utilisateur (UserMenu). Un seul niveau,
      pas de système d'élévation complet (aucun autre consommateur connu). */
   --corrux-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
+
+  /* --- Fond assombri (UI-204) -----------------------------------------
+     Utilisé par <dialog>::backdrop (Modal de confirmation destructive).
+     Même logique que --corrux-shadow-md : valeur d'effet, pas une
+     couleur de palette. */
+  --corrux-backdrop-color: rgba(0, 0, 0, 0.4);
 }

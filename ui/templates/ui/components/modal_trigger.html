@@ -1,0 +1,13 @@
+{% comment %}
+Déclencheur de modal — UI-204. Ouvre le <dialog> distant identifié par
+modal_id via ui/static/ui/js/modal.js (script générique, un seul par
+page). Réutilise les classes .corrux-button existantes (components.css,
+UI-101) — pas un second système de bouton.
+{% endcomment %}
+<button
+  type="button"
+  class="corrux-button corrux-button--{{ variant }}"
+  data-modal-target="{{ modal_id }}"
+>
+  {{ label }}
+</button>
