@@ -1,0 +1,30 @@
+{% load static ui_tags %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — CORRUX</title>
+  <link rel="stylesheet" href="{% static 'ui/css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/css/components.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/css/auth.css' %}">
+</head>
+<body class="corrux-root corrux-auth-page">
+  <main class="corrux-auth-card">
+    <p class="corrux-auth-card__brand">CORRUX</p>
+    <h1 class="corrux-h2">Connexion</h1>
+
+    {% if error %}
+      <p class="corrux-auth-card__error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <form method="post" class="corrux-auth-card__form">
+      {% csrf_token %}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      {% corrux_field label="Identifiant" name="username" field_id="id_username" value=username required=True autofocus=True autocomplete="username" %}
+      {% corrux_field label="Mot de passe" name="password" field_id="id_password" input_type="password" required=True autocomplete="current-password" %}
+      {% corrux_button label="Se connecter" variant="primary" type="submit" %}
+    </form>
+  </main>
+</body>
+</html>

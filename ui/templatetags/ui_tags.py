@@ -114,11 +114,15 @@ def corrux_field(
     error="",
     success="",
     help_text="",
+    autofocus=False,
+    autocomplete="",
 ):
     """Champ de formulaire (texte) — label, aide, validation inline.
 
     `error` et `success` sont mutuellement exclusifs (erreur prioritaire
     si les deux sont fournis) ; à défaut, `help_text` s'affiche.
+    `autofocus`/`autocomplete` ajoutés en UI-103 (rétrocompatibles, défaut
+    inchangé pour tout usage existant).
     """
     return {
         "label": label,
@@ -132,6 +136,8 @@ def corrux_field(
         "error": error,
         "success": success if not error else "",
         "help_text": help_text,
+        "autofocus": autofocus,
+        "autocomplete": autocomplete,
     }
 
 

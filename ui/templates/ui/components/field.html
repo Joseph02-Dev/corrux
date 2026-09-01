@@ -16,6 +16,8 @@ message d'erreur relié via aria-describedby (lecteur d'écran).
     {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
     {% if required %}required aria-required="true"{% endif %}
     {% if disabled %}disabled{% endif %}
+    {% if autofocus %}autofocus{% endif %}
+    {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
     {% if error %}aria-invalid="true" aria-describedby="{{ field_id }}-message"{% elif help_text %}aria-describedby="{{ field_id }}-message"{% endif %}
   >
   {% if error %}

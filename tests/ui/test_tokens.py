@@ -12,6 +12,7 @@ CSS_DIR = Path(__file__).resolve().parent.parent.parent / "ui" / "static" / "ui"
 TOKENS_CSS = CSS_DIR / "tokens.css"
 COMPONENTS_CSS = CSS_DIR / "components.css"
 SHELL_CSS = CSS_DIR / "shell.css"
+AUTH_CSS = CSS_DIR / "auth.css"
 
 # Couleurs hexadécimales (#fff, #ffffff...). currentColor/transparent/
 # rgba(...) dans le token de focus-ring sont volontairement exclus (ce
@@ -84,7 +85,7 @@ def test_no_dark_mode_media_query_anywhere_in_design_system_css():
     mention du concept dans un commentaire explicatif : les commentaires
     CSS sont retirés avant la recherche.
     """
-    for css_file in (TOKENS_CSS, COMPONENTS_CSS, SHELL_CSS):
+    for css_file in (TOKENS_CSS, COMPONENTS_CSS, SHELL_CSS, AUTH_CSS):
         content = css_file.read_text(encoding="utf-8")
         without_comments = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
         assert "prefers-color-scheme" not in without_comments
@@ -100,6 +101,18 @@ def test_shell_css_never_hardcodes_a_hex_color():
     content = SHELL_CSS.read_text(encoding="utf-8")
     matches = _HEX_COLOR_RE.findall(content)
     assert matches == [], f"Couleurs en dur inattendues dans shell.css : {matches}"
+
+
+def test_auth_css_file_exists():
+    assert AUTH_CSS.is_file()
+
+
+def test_auth_css_never_hardcodes_a_hex_color():
+    """Même critère d'acceptation, appliqué au nouveau fichier auth.css
+    (UI-103) : aucune couleur en dur en dehors des tokens."""
+    content = AUTH_CSS.read_text(encoding="utf-8")
+    matches = _HEX_COLOR_RE.findall(content)
+    assert matches == [], f"Couleurs en dur inattendues dans auth.css : {matches}"
 
 
 def test_no_focus_outline_removed_without_replacement():

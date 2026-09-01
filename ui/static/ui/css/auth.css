@@ -1,0 +1,46 @@
+/*
+ * CORRUX — Pages d'authentification hors shell (UI-103).
+ *
+ * Carte centrée, largeur fixe — maquettes-ui-v1-lot1.md, écran Login :
+ * "carte centrée : marque, titre, formulaire, action principale" /
+ * "carte à largeur fixe, se recentre ; pas d'adaptation tablette
+ * nécessaire". Fichier séparé (comme shell.css) : agencement de page,
+ * pas une primitive de components.css. Uniquement via les tokens de
+ * tokens.css.
+ */
+
+.corrux-auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--corrux-color-surface-1);
+}
+
+.corrux-auth-card {
+  width: 360px;
+  background-color: var(--corrux-color-surface-0);
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-md);
+  padding: var(--corrux-space-6);
+}
+
+.corrux-auth-card__brand {
+  font-weight: var(--corrux-font-weight-bold);
+  font-size: var(--corrux-font-size-h3);
+  color: var(--corrux-color-primary);
+  margin: 0 0 var(--corrux-space-2) 0;
+}
+
+.corrux-auth-card__error {
+  background-color: var(--corrux-color-error-bg);
+  color: var(--corrux-color-error);
+  border-radius: var(--corrux-radius-sm);
+  padding: var(--corrux-space-2) var(--corrux-space-3);
+  font-size: var(--corrux-font-size-small);
+  margin: var(--corrux-space-4) 0 0 0;
+}
+
+.corrux-auth-card__form {
+  margin-top: var(--corrux-space-4);
+}
