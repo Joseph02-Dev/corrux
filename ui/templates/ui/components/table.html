@@ -1,0 +1,26 @@
+{% comment %}
+Composant Table générique — UI-201, réutilisable tel quel par UI-205
+(Sauvegardes) et UI-206 (Journal d'audit). Aucune logique métier ici :
+en-têtes et lignes fournis par l'appelant. Les cellules de `row.cells`
+sont du texte simple, échappé automatiquement par Django ({{ cell }}).
+`row.actions_html`, s'il est fourni, est un fragment déjà rendu par des
+composants de confiance (jamais une donnée utilisateur brute) — inséré
+tel quel.
+{% endcomment %}
+<table class="corrux-table">
+  <thead>
+    <tr>
+      {% for header in headers %}<th scope="col">{{ header }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+      <tr>
+        {% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
+        {% if row.actions_html %}
+          <td class="corrux-table__actions">{{ row.actions_html|safe }}</td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

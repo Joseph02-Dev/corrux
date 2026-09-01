@@ -61,7 +61,7 @@ def get_navigation(user: User | None) -> tuple[NavGroup, ...]:
 
     admin_items: list[NavItem] = []
     if has_permission(user, "core.user.read"):
-        admin_items.append(NavItem("Utilisateurs & rôles", "#", "user"))
+        admin_items.append(NavItem("Utilisateurs & rôles", "/utilisateurs/", "user"))
     if has_permission(user, "core.module.read"):
         admin_items.append(NavItem("Modules", "#", "settings"))
     if has_permission(user, "core.backup.read"):

@@ -17,6 +17,7 @@ Rend un <a> (navigation) si `href` est fourni, sinon un <button>
   class="corrux-button corrux-button--{{ variant }}{% if loading %} corrux-button--loading{% endif %}"
   {% if disabled or loading %}disabled aria-disabled="true"{% endif %}
   {% if loading %}aria-busy="true"{% endif %}
+  {% if formaction %}formaction="{{ formaction }}"{% endif %}
 >
   {% if loading %}
     <span class="corrux-button__spinner" aria-hidden="true"></span>

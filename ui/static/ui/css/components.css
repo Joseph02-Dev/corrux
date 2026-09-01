@@ -423,3 +423,186 @@ a.corrux-button {
 .corrux-modal__actions form {
   margin: 0;
 }
+
+/* --- Table générique (UI-201) -------------------------------------------
+   Réutilisable telle quelle par UI-205/UI-206. */
+
+.corrux-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--corrux-font-size-body);
+}
+
+.corrux-table th {
+  text-align: left;
+  font-size: var(--corrux-font-size-small);
+  font-weight: var(--corrux-font-weight-medium);
+  color: var(--corrux-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--corrux-space-3) var(--corrux-space-3);
+  border-bottom: 1px solid var(--corrux-color-border);
+}
+
+.corrux-table td {
+  padding: var(--corrux-space-3);
+  border-bottom: 1px solid var(--corrux-color-border);
+  color: var(--corrux-color-text-primary);
+}
+
+.corrux-table__actions {
+  display: flex;
+  gap: var(--corrux-space-2);
+}
+
+/* --- Drawer générique (UI-201) -------------------------------------------
+   <dialog> natif positionné en panneau latéral (CSS uniquement ; même
+   comportement natif — focus trap/Échap/backdrop — que le Modal UI-204,
+   simple différence de position/animation). */
+
+.corrux-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: auto;
+  margin: 0;
+  height: 100vh;
+  max-height: 100vh;
+  width: 420px;
+  max-width: calc(100vw - var(--corrux-space-4) * 2);
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--corrux-color-border);
+  box-shadow: var(--corrux-shadow-md);
+}
+
+.corrux-drawer::backdrop {
+  background-color: var(--corrux-backdrop-color);
+}
+
+.corrux-drawer__form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.corrux-drawer__header {
+  padding: var(--corrux-space-5) var(--corrux-space-5) var(--corrux-space-3);
+  border-bottom: 1px solid var(--corrux-color-border);
+}
+
+.corrux-drawer__title {
+  margin: 0;
+  font-size: var(--corrux-font-size-h3);
+  font-weight: var(--corrux-font-weight-bold);
+  color: var(--corrux-color-text-primary);
+}
+
+.corrux-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--corrux-space-5);
+}
+
+.corrux-drawer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--corrux-space-2);
+  padding: var(--corrux-space-4) var(--corrux-space-5);
+  border-top: 1px solid var(--corrux-color-border);
+}
+
+/* --- Pied de formulaire destructif (ex. section "Désactiver ce compte"
+   dans le Drawer d'édition) ---------------------------------------------- */
+
+.corrux-drawer__danger-zone {
+  margin-top: var(--corrux-space-6);
+  padding-top: var(--corrux-space-4);
+  border-top: 1px solid var(--corrux-color-border);
+}
+
+/* --- Tabs minimales (UI-201) ----------------------------------------------
+   Pattern non générique à dessein : un seul consommateur réel
+   (Utilisateurs actif / Rôles visuellement présent mais désactivé,
+   UI-202 non anticipé). Pas de mécanisme de bascule de panneau. */
+
+.corrux-tabs {
+  display: flex;
+  gap: var(--corrux-space-2);
+  border-bottom: 1px solid var(--corrux-color-border);
+  margin-bottom: var(--corrux-space-4);
+}
+
+.corrux-tabs__tab {
+  padding: var(--corrux-space-2) var(--corrux-space-3);
+  font-size: var(--corrux-font-size-body);
+  font-weight: var(--corrux-font-weight-medium);
+  color: var(--corrux-color-text-secondary);
+  border-bottom: 2px solid transparent;
+}
+
+.corrux-tabs__tab[aria-selected="true"] {
+  color: var(--corrux-color-primary);
+  border-bottom-color: var(--corrux-color-primary);
+}
+
+.corrux-tabs__tab[aria-disabled="true"] {
+  color: var(--corrux-color-text-muted);
+  cursor: not-allowed;
+}
+
+/* --- Écran Utilisateurs & rôles (UI-201) ----------------------------------
+   Barre d'outils (recherche + compteur). */
+
+.corrux-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--corrux-space-3);
+  margin-bottom: var(--corrux-space-4);
+}
+
+.corrux-toolbar__count {
+  color: var(--corrux-color-text-muted);
+  font-size: var(--corrux-font-size-small);
+}
+
+.corrux-toolbar__search {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-2);
+  max-width: 320px;
+  flex: 1;
+  color: var(--corrux-color-text-muted);
+}
+
+.corrux-toolbar__search-input {
+  flex: 1;
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-sm);
+  padding: var(--corrux-space-2) var(--corrux-space-3);
+  font-family: inherit;
+  font-size: var(--corrux-font-size-body);
+  color: var(--corrux-color-text-primary);
+}
+
+/* --- Affichage unique du mot de passe temporaire (création/réinitialisation) */
+
+.corrux-secret-reveal {
+  padding: var(--corrux-space-4);
+  background-color: var(--corrux-color-warning-bg);
+  border: 1px solid var(--corrux-color-warning);
+  border-radius: var(--corrux-radius-md);
+  margin: var(--corrux-space-4) 0;
+}
+
+.corrux-secret-reveal__value {
+  display: block;
+  font-family: var(--corrux-font-family-mono);
+  font-size: var(--corrux-font-size-h3);
+  padding: var(--corrux-space-2);
+  margin-top: var(--corrux-space-2);
+  background-color: var(--corrux-color-surface-0);
+  border-radius: var(--corrux-radius-sm);
+  word-break: break-all;
+}

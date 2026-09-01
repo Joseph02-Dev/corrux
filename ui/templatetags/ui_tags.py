@@ -14,6 +14,8 @@ Usage dans un template :
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django import template
 
 from ui.navigation import get_navigation
@@ -79,7 +81,13 @@ _ICON_PATHS: dict[str, str] = {
 
 @register.inclusion_tag("ui/components/button.html")
 def corrux_button(
-    label, variant="primary", type="button", disabled=False, loading=False, href=""  # noqa: A002
+    label,
+    variant="primary",
+    type="button",  # noqa: A002
+    disabled=False,
+    loading=False,
+    href="",
+    formaction="",
 ):
     """Bouton — variantes primaire/secondaire/tertiaire/danger.
 
@@ -87,10 +95,13 @@ def corrux_button(
     basculement dynamique loading<->défaut appartient au JS d'un écran
     consommateur (hors périmètre UI-101, aucun JS de composant ici).
 
-    `href` (UI-104, rétrocompatible) : si fourni, rend un lien <a> stylé
-    comme un bouton plutôt qu'un <button> — pour les actions de
-    navigation (ex. CTA d'un état vide, « Réessayer » d'un état erreur),
-    par opposition aux soumissions de formulaire.
+    `href` (UI-104) : rend un <a> stylé bouton plutôt qu'un <button> pour
+    les actions de navigation.
+    `formaction` (UI-201, rétrocompatible) : override HTML natif de la
+    cible d'un bouton de soumission au sein d'un formulaire existant (ex.
+    « Réinitialiser le mot de passe » dans le Drawer d'édition, qui cible
+    une URL différente de l'action principale du formulaire) — aucun
+    JavaScript nécessaire, mécanisme natif du navigateur.
     """
     if variant not in _BUTTON_VARIANTS:
         raise ValueError(
@@ -103,6 +114,7 @@ def corrux_button(
         "disabled": disabled,
         "loading": loading,
         "href": href,
+        "formaction": formaction,
     }
 
 
@@ -133,13 +145,16 @@ def corrux_field(
     help_text="",
     autofocus=False,
     autocomplete="",
+    options=None,
 ):
-    """Champ de formulaire (texte) — label, aide, validation inline.
+    """Champ de formulaire — label, aide, validation inline.
 
     `error` et `success` sont mutuellement exclusifs (erreur prioritaire
     si les deux sont fournis) ; à défaut, `help_text` s'affiche.
-    `autofocus`/`autocomplete` ajoutés en UI-103 (rétrocompatibles, défaut
-    inchangé pour tout usage existant).
+    `autofocus`/`autocomplete` (UI-103) et `options` (UI-201,
+    input_type="select" : liste de tuples (valeur, libellé)) sont
+    rétrocompatibles — tout usage existant sans ces paramètres est
+    inchangé.
     """
     return {
         "label": label,
@@ -155,6 +170,7 @@ def corrux_field(
         "help_text": help_text,
         "autofocus": autofocus,
         "autocomplete": autocomplete,
+        "options": options or [],
     }
 
 
@@ -321,3 +337,66 @@ def corrux_modal_trigger(modal_id, label, variant="secondary"):
             f"attendu parmi {_BUTTON_VARIANTS}"
         )
     return {"modal_id": modal_id, "label": label, "variant": variant}
+
+
+# --- Table / Drawer génériques (UI-201) -------------------------------------
+# Premiers composants structurels au-delà des primitives UI-101 — même
+# registre, aucun second système. Réutilisables tels quels par UI-205
+# (Sauvegardes) et UI-206 (Journal d'audit) pour Table ; par tout futur
+# formulaire latéral pour Drawer.
+
+
+@dataclass(frozen=True)
+class TableRow:
+    """Une ligne de corrux_table.
+
+    `cells` : valeurs texte, échappées automatiquement par le template
+    ({{ cell }}). `actions_html` : fragment HTML de confiance déjà rendu
+    par l'appelant (ex. via render_to_string sur modal_trigger.html) —
+    jamais une donnée utilisateur brute insérée directement.
+    """
+
+    cells: tuple[str, ...]
+    actions_html: str = ""
+
+
+@register.inclusion_tag("ui/components/table.html")
+def corrux_table(headers, rows):
+    """Table générique — UI-201, réutilisable telle quelle par UI-205/206.
+
+    Aucune logique métier : `headers` (libellés de colonnes) et `rows`
+    (liste de TableRow) sont entièrement fournis par l'appelant.
+    """
+    return {"headers": headers, "rows": rows}
+
+
+@register.inclusion_tag("ui/components/drawer.html")
+def corrux_drawer(
+    drawer_id, title, content, action="", method="post",
+    submit_label="Enregistrer", cancel_label="Annuler", open=False,  # noqa: A002
+):
+    """Panneau latéral générique — structure/layout uniquement (UI-201).
+
+    <dialog> natif, même mécanisme d'ouverture que corrux_modal (UI-204) :
+    ouvert via corrux_modal_trigger ciblant `drawer_id` (le mécanisme est
+    générique, pas spécifique à un "modal" au sens visuel). `content` est
+    un fragment HTML de confiance déjà rendu par l'appelant — ce
+    composant ne connaît aucun champ de formulaire spécifique, il ne
+    fournit que l'habillage (titre, zone de contenu, actions Annuler/
+    Soumettre).
+
+    `open` (UI-201) : ouvre le <dialog> nativement dès le rendu (attribut
+    HTML `open`), sans JavaScript — utilisé pour réafficher un formulaire
+    en erreur après une soumission invalide, ou pour un accès GET direct
+    à l'URL d'édition.
+    """
+    return {
+        "drawer_id": drawer_id,
+        "title": title,
+        "content": content,
+        "action": action,
+        "method": method,
+        "submit_label": submit_label,
+        "cancel_label": cancel_label,
+        "open": open,
+    }

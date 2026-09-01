@@ -1,18 +1,28 @@
-"""Vues de référence de la couche présentation — UI-101, UI-102, UI-103.
+"""Vues de référence de la couche présentation — UI-101, UI-102, UI-103,
+UI-201.
 
-Pages de documentation vivante (UI-101/102) et écran de connexion réel
-(UI-103). Aucune logique métier propre : réutilise directement
-core.identity.auth (TECH-002/TECH-008) comme unique autorité.
+Pages de documentation vivante (UI-101/102) et écrans réels (UI-103,
+UI-201). Aucune logique métier propre : réutilise directement
+core.identity/core.authz (TECH-002/003/008) comme unique autorité.
 """
 
+import secrets
+
+from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from core.audit.service import record_audit_event
+from core.authz.decorators import require_permission
+from core.authz.engine import has_permission
+from core.authz.models import Role, UserRole
 from core.identity import auth
 from core.identity.models import User
+from ui.templatetags import ui_tags
 
 # Provisoire : aucune page d'accueil/tableau de bord réelle n'existe
 # encore (seuls UI-101/UI-102 fournissent des pages, toutes deux des
@@ -125,3 +135,482 @@ def logout_action(request):
     """
     auth.logout(request)
     return HttpResponseRedirect(reverse("ui-login"))
+
+
+# ============================================================================
+# UI-201 — Utilisateurs & rôles
+# ============================================================================
+#
+# Aucune seconde logique RBAC : has_permission()/require_permission()
+# (TECH-003) sont l'unique autorité, jamais recalculée ni contournée.
+# Le mot de passe temporaire n'est jamais journalisé, jamais stocké en
+# clair, jamais renvoyé au-delà de la réponse immédiate qui le révèle.
+
+# --- Helpers de rendu de composants (réutilise le contexte des inclusion
+# tags existantes — pas de duplication de leurs valeurs par défaut) ------
+
+
+def _component_html(template_name, tag_func, **kwargs):
+    """Rend un composant existant hors du cycle {% load %}, en réutilisant
+    exactement la même construction de contexte que l'inclusion tag
+    (source unique) — pour l'assembler dans un fragment de confiance
+    (ex. contenu d'un Drawer, cellule Actions d'une Table)."""
+    return render_to_string(template_name, tag_func(**kwargs))
+
+
+def _field_html(**kwargs):
+    return _component_html("ui/components/field.html", ui_tags.corrux_field, **kwargs)
+
+
+def _modal_trigger_html(**kwargs):
+    return _component_html(
+        "ui/components/modal_trigger.html", ui_tags.corrux_modal_trigger, **kwargs
+    )
+
+
+# --- Mot de passe temporaire -------------------------------------------
+
+
+def _generate_temporary_password() -> str:
+    """Mot de passe temporaire cryptographiquement sûr — `secrets`
+    (jamais `random`), jamais une seconde primitive cryptographique.
+    Aucune contrainte de complexité/longueur n'est codée ailleurs dans le
+    projet (vérifié explicitement en Phase 2) : 12 octets, ~16
+    caractères URL-safe, ~96 bits d'entropie."""
+    return secrets.token_urlsafe(12)
+
+
+# --- Rôles ---------------------------------------------------------------
+
+
+def _role_select_options(include_empty=True):
+    options = [(str(role.id), role.name) for role in Role.objects.order_by("name")]
+    if include_empty:
+        options = [("", "— Sélectionner —")] + options
+    return options
+
+
+def _user_primary_role(user):
+    """Rôle unique géré par ce Drawer — le modèle autorise plusieurs
+    rôles par utilisateur (UserRole), mais le champ Select de la
+    maquette (Lot 2, §2-3) est singulier. Décision documentée en
+    Phase 2 : ce Drawer gère l'assignation d'un seul rôle."""
+    user_role = user.user_roles.select_related("role").first()
+    return user_role.role if user_role else None
+
+
+def _set_user_primary_role(user, role):
+    UserRole.objects.filter(user=user).delete()
+    if role is not None:
+        UserRole.objects.create(user=user, role=role)
+
+
+# --- Construction du contenu des Drawers (fragments de confiance) --------
+
+
+def _create_drawer_content(errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    return "".join(
+        [
+            _field_html(
+                label="Nom complet",
+                name="full_name",
+                field_id="id_create_full_name",
+                value=values.get("full_name", ""),
+                required=True,
+                error=errors.get("full_name", ""),
+            ),
+            _field_html(
+                label="Identifiant",
+                name="username",
+                field_id="id_create_username",
+                value=values.get("username", ""),
+                required=True,
+                autocomplete="off",
+                error=errors.get("username", ""),
+            ),
+            _field_html(
+                label="Rôle",
+                name="role",
+                field_id="id_create_role",
+                input_type="select",
+                options=_role_select_options(),
+                value=values.get("role_id", ""),
+                required=True,
+                error=errors.get("role", ""),
+                help_text="Un mot de passe temporaire sera généré automatiquement."
+                if not errors.get("role")
+                else "",
+            ),
+        ]
+    )
+
+
+def _edit_drawer_content(user, errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    current_role = _user_primary_role(user)
+    role_html = _field_html(
+        label="Rôle",
+        name="role",
+        field_id=f"id_edit_{user.id}_role",
+        input_type="select",
+        options=_role_select_options(),
+        value=values.get("role_id", str(current_role.id) if current_role else ""),
+        error=errors.get("role", ""),
+    )
+    fields_html = "".join(
+        [
+            _field_html(
+                label="Nom complet",
+                name="full_name",
+                field_id=f"id_edit_{user.id}_full_name",
+                value=values.get("full_name", user.full_name),
+                required=True,
+                error=errors.get("full_name", ""),
+            ),
+            _field_html(
+                label="Identifiant",
+                name="username",
+                field_id=f"id_edit_{user.id}_username",
+                value=values.get("username", user.username),
+                required=True,
+                autocomplete="off",
+                error=errors.get("username", ""),
+            ),
+            role_html,
+        ]
+    )
+
+    reset_url = reverse("ui-user-reset-password", args=[user.id])
+    reset_button = _component_html(
+        "ui/components/button.html",
+        ui_tags.corrux_button,
+        label="Réinitialiser le mot de passe",
+        variant="secondary",
+        type="submit",
+        formaction=reset_url,
+    )
+
+    danger_zone = ""
+    if user.status == User.Status.ACTIVE:
+        danger_zone = (
+            '<div class="corrux-drawer__danger-zone">'
+            + _modal_trigger_html(
+                modal_id=f"deactivate-user-{user.id}",
+                label="Désactiver ce compte",
+                variant="danger",
+            )
+            + "</div>"
+        )
+
+    return fields_html + reset_button + danger_zone
+
+
+# --- Assemblage de la page liste (réutilisé par GET normal et par les
+# ré-affichages en erreur après une soumission invalide) -------------------
+
+
+def _user_table_rows(users):
+    rows = []
+    for user in users:
+        role = _user_primary_role(user)
+        actions = _modal_trigger_html(
+            modal_id=f"edit-user-{user.id}", label="Modifier", variant="secondary"
+        )
+        if user.status == User.Status.ACTIVE:
+            actions += _modal_trigger_html(
+                modal_id=f"deactivate-user-{user.id}", label="Désactiver", variant="danger"
+            )
+        rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    user.full_name,
+                    user.username,
+                    role.name if role else "—",
+                    user.get_status_display(),
+                ),
+                actions_html=actions,
+            )
+        )
+    return rows
+
+
+def _render_user_list_page(
+    request,
+    *,
+    open_drawer_id="",
+    create_errors=None,
+    create_values=None,
+    edit_user_id=None,
+    edit_errors=None,
+    edit_values=None,
+    http_status=200,
+):
+    search = request.GET.get("q", "").strip()
+    users = User.objects.all().order_by("full_name")
+    if search:
+        users = users.filter(full_name__icontains=search) | users.filter(
+            username__icontains=search
+        )
+    users = list(users)
+
+    can_write = has_permission(request.corrux_user, "core.user.write")
+
+    deactivate_modals_html = "".join(
+        _component_html(
+            "ui/components/modal.html",
+            ui_tags.corrux_modal,
+            modal_id=f"deactivate-user-{u.id}",
+            title="Désactiver ce compte",
+            message=(
+                f"« {u.full_name} » ne pourra plus se connecter. Ses données et son "
+                "historique sont conservés et la désactivation peut être annulée en "
+                "réactivant le compte ultérieurement."
+            ),
+            confirm_label="Désactiver",
+            action=reverse("ui-user-deactivate", args=[u.id]),
+        )
+        for u in users
+        if u.status == User.Status.ACTIVE
+    )
+
+    edit_drawers_html = "".join(
+        _component_html(
+            "ui/components/drawer.html",
+            ui_tags.corrux_drawer,
+            drawer_id=f"edit-user-{u.id}",
+            title=f"Modifier « {u.full_name} »",
+            action=reverse("ui-user-edit", args=[u.id]),
+            content=_edit_drawer_content(
+                u,
+                errors=(edit_errors if edit_user_id == u.id else None),
+                values=(edit_values if edit_user_id == u.id else None),
+            ),
+            open=(open_drawer_id == f"edit-user-{u.id}"),
+        )
+        for u in users
+    )
+
+    context = {
+        "can_write": can_write,
+        "table_headers": ["Nom", "Identifiant", "Rôle", "Statut", "Actions"],
+        "table_rows": _user_table_rows(users) if users else [],
+        "users_empty": not users,
+        "search": search,
+        "user_count": len(users),
+        "create_drawer_content": _create_drawer_content(create_errors, create_values),
+        "create_url": reverse("ui-user-create"),
+        "create_drawer_open": open_drawer_id == "create-user",
+        "edit_drawers_html": edit_drawers_html,
+        "deactivate_modals_html": deactivate_modals_html,
+        "open_drawer_id": open_drawer_id,
+    }
+    return render(request, "ui/users/list.html", context, status=http_status)
+
+
+# --- Vues ------------------------------------------------------------------
+
+
+def user_list(request):
+    """Liste des utilisateurs — UI-201.
+
+    Permission de lecture vérifiée manuellement (pas via le décorateur
+    require_permission, qui renvoie du JSON) : cette vue est le point de
+    navigation principal de l'écran, elle doit afficher
+    corrux_permission_denied (UI-104) plutôt qu'un 403 JSON brut — même
+    autorité (has_permission, TECH-003), traitement de réponse différent.
+    """
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-user-list')}")
+
+    if not has_permission(request.corrux_user, "core.user.read"):
+        return render(request, "ui/users/list.html", {"permission_denied": True}, status=403)
+
+    return _render_user_list_page(request)
+
+
+@require_permission("core.user.write")
+@require_POST
+def user_create(request):
+    full_name = request.POST.get("full_name", "").strip()
+    username = request.POST.get("username", "").strip()
+    role_id = request.POST.get("role", "").strip()
+
+    errors = {}
+    if not full_name:
+        errors["full_name"] = "Ce champ est requis."
+    if not username:
+        errors["username"] = "Ce champ est requis."
+
+    role = None
+    if not role_id:
+        errors["role"] = "Ce champ est requis."
+    else:
+        role = Role.objects.filter(pk=role_id).first()
+        if role is None:
+            errors["role"] = "Rôle invalide."
+
+    if not errors and User.objects.filter(username=username).exists():
+        errors["username"] = "Cet identifiant est déjà utilisé."
+
+    values = {"full_name": full_name, "username": username, "role_id": role_id}
+    if errors:
+        return _render_user_list_page(
+            request,
+            open_drawer_id="create-user",
+            create_errors=errors,
+            create_values=values,
+            http_status=400,
+        )
+
+    temporary_password = _generate_temporary_password()
+    user = User(username=username, full_name=full_name)
+    auth.set_user_password(user, temporary_password)
+
+    try:
+        with transaction.atomic():
+            user.save()
+            UserRole.objects.create(user=user, role=role)
+    except IntegrityError:
+        return _render_user_list_page(
+            request,
+            open_drawer_id="create-user",
+            create_errors={"username": "Cet identifiant est déjà utilisé."},
+            create_values=values,
+            http_status=400,
+        )
+
+    # Le secret n'apparaît jamais dans les métadonnées d'audit.
+    record_audit_event(
+        actor=request.corrux_user,
+        action="user.create",
+        target=username,
+        metadata={"role": role.name},
+    )
+
+    return render(
+        request,
+        "ui/users/secret_reveal.html",
+        {
+            "heading": "Compte créé",
+            "intro": f"Le compte « {username} » a été créé.",
+            "username": username,
+            "temporary_password": temporary_password,
+        },
+    )
+
+
+@require_permission("core.user.write")
+def user_edit(request, user_id):
+    user = get_object_or_404(User, pk=user_id)
+
+    if request.method != "POST":
+        return _render_user_list_page(request, open_drawer_id=f"edit-user-{user.id}")
+
+    full_name = request.POST.get("full_name", "").strip()
+    username = request.POST.get("username", "").strip()
+    role_id = request.POST.get("role", "").strip()
+
+    errors = {}
+    if not full_name:
+        errors["full_name"] = "Ce champ est requis."
+    if not username:
+        errors["username"] = "Ce champ est requis."
+
+    role = None
+    if role_id:
+        role = Role.objects.filter(pk=role_id).first()
+        if role is None:
+            errors["role"] = "Rôle invalide."
+
+    if not errors and User.objects.filter(username=username).exclude(pk=user.id).exists():
+        errors["username"] = "Cet identifiant est déjà utilisé."
+
+    values = {"full_name": full_name, "username": username, "role_id": role_id}
+    if errors:
+        return _render_user_list_page(
+            request,
+            open_drawer_id=f"edit-user-{user.id}",
+            edit_user_id=user.id,
+            edit_errors=errors,
+            edit_values=values,
+            http_status=400,
+        )
+
+    try:
+        with transaction.atomic():
+            user.full_name = full_name
+            user.username = username
+            user.save(update_fields=["full_name", "username"])
+            _set_user_primary_role(user, role)
+    except IntegrityError:
+        return _render_user_list_page(
+            request,
+            open_drawer_id=f"edit-user-{user.id}",
+            edit_user_id=user.id,
+            edit_errors={"username": "Cet identifiant est déjà utilisé."},
+            edit_values=values,
+            http_status=400,
+        )
+
+    record_audit_event(
+        actor=request.corrux_user,
+        action="user.update",
+        target=username,
+        metadata={"role": role.name if role else None},
+    )
+    return HttpResponseRedirect(reverse("ui-user-list"))
+
+
+@require_permission("core.user.write")
+@require_POST
+def user_reset_password(request, user_id):
+    user = get_object_or_404(User, pk=user_id)
+
+    temporary_password = _generate_temporary_password()
+    auth.set_user_password(user, temporary_password)
+    # Une réinitialisation lève aussi un éventuel verrouillage anti-
+    # bruteforce hérité (même logique qu'un login réussi, TECH-002) :
+    # un nouveau mot de passe ne doit pas hériter d'un ancien verrouillage.
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.save(update_fields=["password_hash", "failed_login_attempts", "locked_until"])
+
+    record_audit_event(
+        actor=request.corrux_user,
+        action="user.password_reset",
+        target=user.username,
+        metadata={},
+    )
+
+    return render(
+        request,
+        "ui/users/secret_reveal.html",
+        {
+            "heading": "Mot de passe réinitialisé",
+            "intro": f"Un nouveau mot de passe a été généré pour « {user.username} ».",
+            "username": user.username,
+            "temporary_password": temporary_password,
+        },
+    )
+
+
+@require_permission("core.user.write")
+@require_POST
+def user_deactivate(request, user_id):
+    """Désactivation — jamais de suppression (User, UserRole et données
+    associées restent intacts, seul `status` change)."""
+    user = get_object_or_404(User, pk=user_id)
+    user.status = User.Status.INACTIVE
+    user.save(update_fields=["status"])
+
+    record_audit_event(
+        actor=request.corrux_user,
+        action="user.deactivate",
+        target=user.username,
+        metadata={},
+    )
+    return HttpResponseRedirect(reverse("ui-user-list"))

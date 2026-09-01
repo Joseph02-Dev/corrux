@@ -1,0 +1,28 @@
+{% comment %}
+Composant Drawer générique — UI-201. Structure/layout uniquement, aucune
+logique métier : le contenu du formulaire (`content`) est un fragment
+déjà rendu par l'appelant (composants de confiance, jamais une donnée
+utilisateur brute directement interpolée). <dialog> natif, même
+mécanisme d'ouverture que corrux_modal (UI-204, modal.js réutilisé tel
+quel — data-modal-target est générique, pas spécifique à un "modal").
+Bouton Annuler : formmethod="dialog" (natif, fermeture sans requête
+réseau, aucun second script) — même formulaire que la soumission
+réelle, override natif du bouton uniquement.
+{% endcomment %}
+<dialog id="{{ drawer_id }}" class="corrux-drawer" aria-labelledby="{{ drawer_id }}-title"{% if open %} open{% endif %}>
+  <form method="{{ method }}" {% if action %}action="{{ action }}"{% endif %} class="corrux-drawer__form">
+    {% if method == "post" %}{% csrf_token %}{% endif %}
+    <div class="corrux-drawer__header">
+      <h2 id="{{ drawer_id }}-title" class="corrux-drawer__title">{{ title }}</h2>
+    </div>
+    <div class="corrux-drawer__body">
+      {{ content|safe }}
+    </div>
+    <div class="corrux-drawer__actions">
+      <button type="submit" formmethod="dialog" class="corrux-button corrux-button--secondary">
+        {{ cancel_label }}
+      </button>
+      <button type="submit" class="corrux-button corrux-button--primary">{{ submit_label }}</button>
+    </div>
+  </form>
+</dialog>

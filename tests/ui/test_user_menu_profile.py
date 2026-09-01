@@ -114,9 +114,13 @@ class TestUserMenuRendering:
 @pytest.mark.django_db
 class TestUserMenuIntegrationInShell:
     def test_multiple_roles_are_joined_and_displayed(self, active_user):
+        """« Administrateur » et « Employé » sont désormais des rôles
+        prédéfinis semés par UI-201 (migration 0006) : réutilisés tels
+        quels plutôt que recréés (le nom est réservé par contrainte
+        d'unicité, correctement appliquée)."""
         Role.objects.create(name="Zebra")  # pour vérifier l'ordre alphabétique
-        role_a = Role.objects.create(name="Administrateur")
-        role_b = Role.objects.create(name="Employé")
+        role_a = Role.objects.get(name="Administrateur")
+        role_b = Role.objects.get(name="Employé")
         UserRole.objects.create(user=active_user, role=role_a)
         UserRole.objects.create(user=active_user, role=role_b)
 

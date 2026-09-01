@@ -1,12 +1,29 @@
 {% comment %}
-Composant Champ (texte) — label, aide, validation inline (erreur/succès).
-Cf. ux-ui-design-v1.md §4. Sémantique HTML : <label for> lié à l'input,
+Composant Champ — label, aide, validation inline (erreur/succès).
+Cf. ux-ui-design-v1.md §4. Sémantique HTML : <label for> lié au contrôle,
 message d'erreur relié via aria-describedby (lecteur d'écran).
+input_type="select" (UI-201, extension rétrocompatible) rend un <select>
+natif plutôt qu'un <input> — même label/aide/erreur, aucun second
+composant de champ créé.
 {% endcomment %}
 <div class="corrux-field{% if error %} corrux-field--error{% elif success %} corrux-field--success{% endif %}">
   <label for="{{ field_id }}" class="corrux-field__label">
     {{ label }}{% if required %}<span class="corrux-field__required" aria-hidden="true">*</span>{% endif %}
   </label>
+  {% if input_type == "select" %}
+  <select
+    id="{{ field_id }}"
+    name="{{ name }}"
+    class="corrux-field__input"
+    {% if required %}required aria-required="true"{% endif %}
+    {% if disabled %}disabled{% endif %}
+    {% if error %}aria-invalid="true" aria-describedby="{{ field_id }}-message"{% elif help_text %}aria-describedby="{{ field_id }}-message"{% endif %}
+  >
+    {% for option_value, option_label in options %}
+      <option value="{{ option_value }}"{% if option_value == value %} selected{% endif %}>{{ option_label }}</option>
+    {% endfor %}
+  </select>
+  {% else %}
   <input
     type="{{ input_type }}"
     id="{{ field_id }}"
@@ -20,6 +37,7 @@ message d'erreur relié via aria-describedby (lecteur d'écran).
     {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
     {% if error %}aria-invalid="true" aria-describedby="{{ field_id }}-message"{% elif help_text %}aria-describedby="{{ field_id }}-message"{% endif %}
   >
+  {% endif %}
   {% if error %}
     <p id="{{ field_id }}-message" class="corrux-field__message">{{ error }}</p>
   {% elif success %}

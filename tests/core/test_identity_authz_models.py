@@ -42,20 +42,20 @@ class TestUser:
 @pytest.mark.django_db
 class TestRole:
     def test_create_valid_role(self):
-        role = Role.objects.create(name="Administrateur", description="Accès complet")
+        role = Role.objects.create(name="Rôle Générique Test", description="Accès complet")
         assert role.pk is not None
 
     def test_name_is_unique(self):
-        Role.objects.create(name="Administrateur")
+        Role.objects.create(name="Rôle Générique Test")
         with pytest.raises(IntegrityError), transaction.atomic():
-            Role.objects.create(name="Administrateur")
+            Role.objects.create(name="Rôle Générique Test")
 
 
 @pytest.mark.django_db
 class TestUserRole:
     def test_create_valid_user_role(self):
         user = User.objects.create(username="jdupont", password_hash="x", full_name="Jean Dupont")
-        role = Role.objects.create(name="Employé")
+        role = Role.objects.create(name="Rôle Test Générique")
         user_role = UserRole.objects.create(user=user, role=role)
         assert user_role.pk is not None
         assert user.user_roles.count() == 1
@@ -63,14 +63,14 @@ class TestUserRole:
 
     def test_user_role_pair_is_unique(self):
         user = User.objects.create(username="jdupont", password_hash="x", full_name="Jean Dupont")
-        role = Role.objects.create(name="Employé")
+        role = Role.objects.create(name="Rôle Test Générique")
         UserRole.objects.create(user=user, role=role)
         with pytest.raises(IntegrityError), transaction.atomic():
             UserRole.objects.create(user=user, role=role)
 
     def test_deleting_user_cascades_to_user_role(self):
         user = User.objects.create(username="jdupont", password_hash="x", full_name="Jean Dupont")
-        role = Role.objects.create(name="Employé")
+        role = Role.objects.create(name="Rôle Test Générique")
         UserRole.objects.create(user=user, role=role)
         user.delete()
         assert UserRole.objects.count() == 0
@@ -102,7 +102,7 @@ class TestPermission:
 @pytest.mark.django_db
 class TestRolePermission:
     def test_create_valid_role_permission(self):
-        role = Role.objects.create(name="Administrateur RH")
+        role = Role.objects.create(name="Rôle RH Test Générique")
         permission = Permission.objects.create(
             module_id="rh", resource="employee", action="write"
         )
@@ -111,7 +111,7 @@ class TestRolePermission:
         assert role.role_permissions.count() == 1
 
     def test_role_permission_pair_is_unique(self):
-        role = Role.objects.create(name="Administrateur RH")
+        role = Role.objects.create(name="Rôle RH Test Générique")
         permission = Permission.objects.create(
             module_id="rh", resource="employee", action="write"
         )
@@ -120,7 +120,7 @@ class TestRolePermission:
             RolePermission.objects.create(role=role, permission=permission)
 
     def test_deleting_permission_cascades_to_role_permission(self):
-        role = Role.objects.create(name="Administrateur RH")
+        role = Role.objects.create(name="Rôle RH Test Générique")
         permission = Permission.objects.create(
             module_id="rh", resource="employee", action="write"
         )

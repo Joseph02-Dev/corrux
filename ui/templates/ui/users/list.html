@@ -1,0 +1,56 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Utilisateurs & rôles — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    {% comment %}
+    Tabs minimales — UI-201. Pattern volontairement non générique : un
+    seul consommateur réel aujourd'hui. « Rôles » n'est pas un lien
+    (UI-202 non implémenté) — jamais présenté comme navigable.
+    {% endcomment %}
+    <div class="corrux-tabs" role="tablist" aria-label="Administration des comptes">
+      <span class="corrux-tabs__tab" role="tab" aria-selected="true">Utilisateurs</span>
+      <span class="corrux-tabs__tab" role="tab" aria-selected="false" aria-disabled="true">
+        Rôles
+      </span>
+    </div>
+
+    <h1 class="corrux-h1">Utilisateurs & rôles</h1>
+
+    <div class="corrux-toolbar">
+      <form method="get" role="search" class="corrux-toolbar__search">
+        {% corrux_icon name="search" %}
+        <input
+          type="search"
+          name="q"
+          value="{{ search }}"
+          class="corrux-toolbar__search-input"
+          placeholder="Rechercher un utilisateur"
+          aria-label="Rechercher un utilisateur par nom ou identifiant"
+        >
+      </form>
+      <span class="corrux-toolbar__count">
+        {{ user_count }} utilisateur{{ user_count|pluralize }}
+      </span>
+      {% if can_write %}
+        {% corrux_modal_trigger modal_id="create-user" label="Nouvel utilisateur" variant="primary" %}
+      {% endif %}
+    </div>
+
+    {% if users_empty %}
+      {% corrux_empty_state message="Aucun utilisateur ne correspond à cette recherche." %}
+    {% else %}
+      {% corrux_table headers=table_headers rows=table_rows %}
+    {% endif %}
+
+    {% if can_write %}
+      {% corrux_drawer drawer_id="create-user" title="Nouvel utilisateur" action=create_url content=create_drawer_content submit_label="Créer" open=create_drawer_open %}
+      {{ edit_drawers_html|safe }}
+      {{ deactivate_modals_html|safe }}
+    {% endif %}
+  {% endif %}
+{% endblock %}
