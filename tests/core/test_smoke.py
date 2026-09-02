@@ -34,12 +34,23 @@ def test_create_schemas_command_creates_the_three_schemas():
     assert found == {"core", "documentation", "rh"}
 
 
-def test_documentation_and_rh_apps_are_installed_without_models():
-    """Documentation et RH sont bien enregistrées, sans modèle en INIT-001."""
+def test_documentation_and_rh_apps_are_installed():
+    """Documentation et RH sont bien enregistrées.
+
+    Documentation possède désormais ses modèles (TECH-020) — mise à jour
+    nécessaire de ce test hérité d'INIT-001, qui affirmait littéralement
+    l'absence de modèle à ce stade initial, désormais dépassé par
+    conception. RH reste un squelette vide, non concerné par ce ticket.
+    """
     from django.apps import apps
 
     documentation_app = apps.get_app_config("documentation")
     rh_app = apps.get_app_config("rh")
 
-    assert list(documentation_app.get_models()) == []
+    assert {m.__name__ for m in documentation_app.get_models()} == {
+        "Document",
+        "Folder",
+        "DocumentPermission",
+        "DocumentMetadata",
+    }
     assert list(rh_app.get_models()) == []
