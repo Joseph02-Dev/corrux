@@ -32,9 +32,12 @@ from datetime import datetime
 from django.db import transaction
 from django.db.models import Q
 
+from core.audit.service import record_audit_event
+from core.authz.models import Role
+from core.authz.object_permissions import has_object_permission
 from core.identity.models import User
 from core.storage import files as storage
-from modules.documentation.models import Document, DocumentMetadata, Folder
+from modules.documentation.models import Document, DocumentMetadata, DocumentPermission, Folder
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".jpg"}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MiB, cf. contrat TECH-021
@@ -143,30 +146,134 @@ def list_folder_contents(folder: Folder | None) -> tuple[list[Document], list[Fo
 
 
 # ============================================================================
-# Recherche documentaire — TECH-022
+# Permissions par document/dossier, intégration à authz — TECH-023
 # ============================================================================
 #
-# Backend pur, lecture seule : aucun accès filesystem (jamais
-# storage.read()/Document.storage_path comme chemin), aucun audit,
-# aucune modification de core.authz. Le filtrage par permission est
-# appliqué DANS la requête ORM (jamais après coup, jamais un filtrage
-# côté appelant) — conforme au critère d'acceptation explicite du
-# ticket : « un document hors permission n'apparaît jamais, même par
-# mot-clé exact ».
+# core.authz.object_permissions.has_object_permission() (générique, ne
+# connaît aucun modèle métier) devient la primitive officielle pour une
+# décision unitaire. Pour le filtrage en masse (search_documents), une
+# clause WHERE ORM reste nécessaire (has_object_permission() ne peut pas
+# être composé efficacement dans une requête portant sur de nombreux
+# documents sans provoquer un N+1) — _document_read_permission_filter()
+# exprime EXACTEMENT la même règle que has_document_permission(...,
+# "read"), nommée et documentée une seule fois, plutôt que la
+# duplication non nommée qu'avait TECH-022. Les deux représentations
+# sont nécessaires pour des raisons de performance (décision unitaire vs
+# filtrage en masse), mais expriment une seule et même règle.
 #
-# Portée du filtrage par permission (décision Phase 2, documentée, pas
-# silencieuse) : DocumentPermission ciblant DIRECTEMENT le document
-# recherché (action="read", pour un rôle de l'utilisateur ou pour
-# l'utilisateur individuellement) + accès implicite du propriétaire
-# (Document.owner_user — confirmé par maquettes-ui-v1-lot3.md §4 :
-# « liste vide -> au moins un accès (le propriétaire) »). Aucun
-# héritage depuis une permission portée par le dossier parent n'est
-# appliqué : aucune source consultée ne le confirme, et le contrat
-# interdit explicitement d'anticiper une règle de TECH-023 au-delà du
-# strict nécessaire. TECH-022 ne crée aucun nouveau moteur RBAC objet,
-# ne modifie pas core/authz/engine.py, et core.authz.has_permission()
-# n'est pas utilisé ici (il n'a aucune notion d'objet spécifique — seule
-# DocumentPermission, propre au schéma documentation, le permet).
+# Règle (décision Phase 2, documentée, pas inventée silencieusement) :
+# - propriétaire -> accès "read" implicite uniquement (aucune source ne
+#   confirme un accès "write" implicite par simple propriété) ;
+# - sinon, DocumentPermission ciblant DIRECTEMENT l'objet (rôle ou
+#   utilisateur, modèle additif pur, aucun deny, aucune priorité) ;
+# - aucun héritage dossier -> document, aucune propagation vers les
+#   sous-dossiers (aucune source ne le confirme) ;
+# - Folder n'a pas de champ propriétaire (vérifié) : aucune règle de
+#   propriétaire de dossier.
+
+
+def _document_read_permission_filter(user: User) -> Q:
+    """Filtre ORM (bulk) exprimant la même règle que
+    `has_document_permission(user, doc, "read")`, nécessaire pour
+    `search_documents()` (éviter un N+1)."""
+    role_ids = user.user_roles.values_list("role_id", flat=True)
+    return (
+        Q(owner_user=user)
+        | Q(permissions__action="read", permissions__role_id__in=role_ids)
+        | Q(permissions__action="read", permissions__user=user)
+    )
+
+
+def has_document_permission(user: User, document: Document, action: str) -> bool:
+    """Décision d'autorisation officielle pour un document précis.
+
+    Propriétaire : accès implicite pour `action="read"` uniquement.
+    Sinon, délègue entièrement à la primitive générique core.authz
+    (aucun moteur RBAC concurrent créé ici)."""
+    if action == "read" and document.owner_user_id == user.id:
+        return True
+    return has_object_permission(user, document.permissions.all(), action)
+
+
+def has_folder_permission(user: User, folder: Folder, action: str) -> bool:
+    """Décision d'autorisation officielle pour un dossier précis.
+
+    Aucune règle de propriétaire implicite (Folder n'a pas de champ
+    propriétaire). Uniquement DocumentPermission directe sur ce
+    dossier — aucune propagation vers son contenu ni depuis un dossier
+    parent."""
+    return has_object_permission(user, folder.permissions.all(), action)
+
+
+def _permission_grantee_label(permission: DocumentPermission) -> str:
+    if permission.user_id:
+        return f"user:{permission.user.username}"
+    return f"role:{permission.role.name}"
+
+
+def _permission_target_label(document: Document | None, folder: Folder | None) -> str:
+    if document is not None:
+        return f"document:{document.id}"
+    return f"folder:{folder.id}"
+
+
+def grant_permission(
+    *,
+    actor: User,
+    action: str,
+    document: Document | None = None,
+    folder: Folder | None = None,
+    user: User | None = None,
+    role: Role | None = None,
+) -> DocumentPermission:
+    """Attribue une permission sur un document ou un dossier, à un
+    utilisateur ou à un rôle — exactement une cible et un bénéficiaire
+    (contrainte déjà portée par le modèle, TECH-020, CheckConstraint).
+
+    `actor` : utilisateur qui effectue l'attribution — utilisé
+    uniquement pour l'audit, jamais pour une vérification RBAC. Aucune
+    règle déterminant qui est autorisé à modifier une permission n'a
+    été identifiée dans les sources (limite signalée, pas inventée).
+
+    Idempotent (get_or_create) : aucun doublon inutile ; l'audit
+    (`documentation.permission_grant`) n'est émis que si une ligne a
+    réellement été créée — cohérent avec le comportement déjà établi de
+    `activate_module()`/`deactivate_module()` (TECH-006), qui n'auditent
+    pas un no-op.
+    """
+    with transaction.atomic():
+        permission, created = DocumentPermission.objects.get_or_create(
+            document=document, folder=folder, user=user, role=role, action=action,
+        )
+        if created:
+            record_audit_event(
+                actor=actor,
+                action="documentation.permission_grant",
+                target=_permission_target_label(document, folder),
+                metadata={"action": action, "grantee": _permission_grantee_label(permission)},
+            )
+    return permission
+
+
+def revoke_permission(*, actor: User, permission: DocumentPermission) -> None:
+    """Retire une permission — suppression de la ligne correspondante.
+
+    Modèle strictement additif : aucun mécanisme de deny, le retrait
+    est une suppression, jamais un refus explicite ajouté. Après
+    retrait, une nouvelle vérification (has_document_permission/
+    has_folder_permission) recalcule l'état actuel de
+    DocumentPermission — aucune valeur n'est mise en cache.
+    """
+    target = _permission_target_label(permission.document, permission.folder)
+    metadata = {"action": permission.action, "grantee": _permission_grantee_label(permission)}
+    with transaction.atomic():
+        permission.delete()
+        record_audit_event(
+            actor=actor,
+            action="documentation.permission_revoke",
+            target=target,
+            metadata=metadata,
+        )
 
 _NO_FOLDER_FILTER = object()  # sentinel : distinct de None (= racine)
 
@@ -198,15 +305,14 @@ def search_documents(
     Tous les filtres fournis sont combinés par ET. Résultat dédupliqué
     (`distinct()`) et trié par nom de fichier (ordre déterministe le
     plus simple, aucune convention de tri n'existe pour Document).
-    """
-    role_ids = user.user_roles.values_list("role_id", flat=True)
 
-    permission_filter = (
-        Q(owner_user=user)
-        | Q(permissions__action="read", permissions__role_id__in=role_ids)
-        | Q(permissions__action="read", permissions__user=user)
-    )
-    queryset = Document.objects.filter(permission_filter)
+    Permission (TECH-023) : `_document_read_permission_filter()` est la
+    même règle, nommée une seule fois, que `has_document_permission(...,
+    "read")` — plus de duplication indépendante de la logique de
+    permission (dette explicitement introduite par TECH-022, corrigée
+    ici).
+    """
+    queryset = Document.objects.filter(_document_read_permission_filter(user))
 
     if keyword:
         queryset = queryset.filter(
