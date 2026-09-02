@@ -1,0 +1,38 @@
+{% comment %}
+Composant Modal d'information — UI-203. Distinct de corrux_modal
+(UI-204, confirmation destructive : Annuler + action + formulaire POST)
+— maquettes-ui-v1-lot2.md §6 : "pas le composant de confirmation
+destructive... pas de choix Annuler/Confirmer, une seule sortie". Un
+seul bouton Fermer, aucun formulaire soumis, aucune requête réseau,
+aucun CSRF nécessaire. Même mécanisme d'ouverture natif que corrux_modal
+(<dialog> + modal.js, non modifié).
+{% endcomment %}
+{% load ui_tags %}
+<dialog
+  id="{{ modal_id }}"
+  class="corrux-modal corrux-modal--info"
+  role="dialog"
+  aria-labelledby="{{ modal_id }}-title"
+  aria-describedby="{{ modal_id }}-message"
+  {% if open %}open{% endif %}
+>
+  <div class="corrux-modal__content">
+    <div class="corrux-modal__header">
+      {% corrux_icon name="warning" %}
+      <h2 id="{{ modal_id }}-title" class="corrux-modal__title">{{ title }}</h2>
+    </div>
+    <div id="{{ modal_id }}-message" class="corrux-modal__message">
+      <p>{{ message }}</p>
+      {% if items %}
+        <ul class="corrux-modal__list">
+          {% for item in items %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+    <div class="corrux-modal__actions">
+      <form method="dialog">
+        {% corrux_button label=close_label variant="secondary" type="submit" %}
+      </form>
+    </div>
+  </div>
+</dialog>

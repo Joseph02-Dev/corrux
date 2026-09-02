@@ -22,6 +22,13 @@ from core.authz.engine import has_permission
 from core.authz.models import Role, UserRole
 from core.identity import auth
 from core.identity.models import User
+from core.modules.manager import (
+    ActiveDependentError,
+    DependencyError,
+    activate_module,
+    deactivate_module,
+)
+from core.modules.models import Module
 from ui.templatetags import ui_tags
 
 # Provisoire : aucune page d'accueil/tableau de bord réelle n'existe
@@ -614,3 +621,183 @@ def user_deactivate(request, user_id):
         metadata={},
     )
     return HttpResponseRedirect(reverse("ui-user-list"))
+
+
+# ============================================================================
+# UI-203 — Modules
+# ============================================================================
+#
+# activate_module()/deactivate_module() (TECH-006/007) restent les
+# seules autorités métier : cette vue ne recalcule ni le graphe de
+# dépendances, ni les conditions de transition d'état — elle appelle ces
+# fonctions telles quelles et se contente de mettre en forme leurs
+# résultats/exceptions. Les deux fonctions journalisent déjà elles-mêmes
+# (succès ET refus, TECH-008) : aucun second record_audit_event ici.
+
+_MODULE_STATE_TONE = {
+    Module.State.ACTIVATED: "success",
+    Module.State.DEACTIVATED: "neutral",
+    Module.State.INSTALLED: "info",
+}
+
+
+def _module_table_rows(modules, can_write):
+    rows = []
+    for module in modules:
+        status_html = _component_html(
+            "ui/components/badge.html",
+            ui_tags.corrux_badge,
+            label=module.get_state_display(),
+            tone=_MODULE_STATE_TONE.get(module.state, "neutral"),
+        )
+        actions_html = ""
+        if can_write:
+            if module.state == Module.State.ACTIVATED:
+                actions_html = _modal_trigger_html(
+                    modal_id=f"deactivate-module-{module.id}",
+                    label="Désactiver",
+                    variant="danger",
+                )
+            else:
+                actions_html = _component_html(
+                    "ui/components/button.html",
+                    ui_tags.corrux_button,
+                    label="Activer",
+                    variant="primary",
+                    type="submit",
+                    formaction=reverse("ui-module-activate", args=[module.id]),
+                )
+        rows.append(
+            ui_tags.TableRow(
+                cells=(module.name, module.version, status_html),
+                actions_html=actions_html,
+            )
+        )
+    return rows
+
+
+def _render_module_list_page(
+    request,
+    *,
+    activation_error="",
+    blocked_module_id=None,
+    blocked_dependents=None,
+    http_status=200,
+):
+    modules = list(Module.objects.order_by("name"))
+    can_write = has_permission(request.corrux_user, "core.module.write")
+
+    table_headers = ["Nom", "Version", "Statut"]
+    if can_write:
+        table_headers.append("Actions")
+
+    deactivate_confirm_modals_html = "".join(
+        _component_html(
+            "ui/components/modal.html",
+            ui_tags.corrux_modal,
+            modal_id=f"deactivate-module-{m.id}",
+            title=f"Désactiver « {m.name} »",
+            message=(
+                f"Le module « {m.name} » sera désactivé. Ses données et permissions "
+                "restent intactes et il pourra être réactivé ultérieurement."
+            ),
+            confirm_label="Désactiver",
+            action=reverse("ui-module-deactivate", args=[m.id]),
+        )
+        for m in modules
+        if can_write and m.state == Module.State.ACTIVATED
+    )
+
+    info_modal_html = ""
+    if blocked_module_id:
+        blocked_module = next((m for m in modules if m.id == blocked_module_id), None)
+        if blocked_module is not None:
+            info_modal_html = _component_html(
+                "ui/components/info_modal.html",
+                ui_tags.corrux_info_modal,
+                modal_id=f"blocked-deactivate-{blocked_module.id}",
+                title=f"Désactivation de « {blocked_module.name} » impossible",
+                message=(
+                    "Les modules suivants en dépendent et sont actuellement actifs :"
+                ),
+                items=blocked_dependents or [],
+                open=True,
+            )
+
+    context = {
+        "can_write": can_write,
+        "table_headers": table_headers,
+        "table_rows": _module_table_rows(modules, can_write) if modules else [],
+        "modules_empty": not modules,
+        "activation_error": activation_error,
+        "deactivate_confirm_modals_html": deactivate_confirm_modals_html,
+        "info_modal_html": info_modal_html,
+    }
+    return render(request, "ui/modules/list.html", context, status=http_status)
+
+
+def module_list(request):
+    """Catalogue des modules — UI-203.
+
+    Permission de lecture vérifiée manuellement (comme user_list,
+    UI-201) : point de navigation principal, doit afficher
+    corrux_permission_denied (UI-104) plutôt qu'un 403 JSON brut.
+    """
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-module-list')}")
+
+    if not has_permission(request.corrux_user, "core.module.read"):
+        return render(
+            request, "ui/modules/list.html", {"permission_denied": True}, status=403
+        )
+
+    return _render_module_list_page(request)
+
+
+@require_permission("core.module.write")
+@require_POST
+def module_activate(request, module_id):
+    """Active un module — délègue entièrement à activate_module()
+    (TECH-006), seule autorité. Aucune vérification de dépendance
+    recalculée ici : le message affiché en cas de refus provient
+    exclusivement de DependencyError.unsatisfied."""
+    get_object_or_404(Module, pk=module_id)
+
+    try:
+        activate_module(module_id, actor=request.corrux_user)
+    except DependencyError as exc:
+        details = "; ".join(f"{d.module} ({d.reason})" for d in exc.unsatisfied)
+        return _render_module_list_page(
+            request,
+            activation_error=(
+                f"Activation de « {module_id} » refusée : "
+                f"dépendance(s) non satisfaite(s) — {details}."
+            ),
+            http_status=400,
+        )
+
+    return HttpResponseRedirect(reverse("ui-module-list"))
+
+
+@require_permission("core.module.write")
+@require_POST
+def module_deactivate(request, module_id):
+    """Désactive un module — délègue entièrement à deactivate_module()
+    (TECH-006/007), seule autorité. Si refusée (dépendant actif), affiche
+    le Modal d'information (UI-203) listant exactement
+    ActiveDependentError.active_dependents — aucun recalcul du graphe de
+    dépendances côté UI."""
+    get_object_or_404(Module, pk=module_id)
+
+    try:
+        deactivate_module(module_id, actor=request.corrux_user)
+    except ActiveDependentError as exc:
+        return _render_module_list_page(
+            request,
+            blocked_module_id=module_id,
+            blocked_dependents=exc.active_dependents,
+            http_status=400,
+        )
+
+    return HttpResponseRedirect(reverse("ui-module-list"))

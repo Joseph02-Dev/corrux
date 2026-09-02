@@ -400,3 +400,33 @@ def corrux_drawer(
         "cancel_label": cancel_label,
         "open": open,
     }
+
+
+# --- Modal d'information (UI-203) -------------------------------------------
+# Distinct de corrux_modal (UI-204, confirmation destructive : Annuler +
+# action + formulaire POST) — sémantique différente, explicitement
+# signalée par maquettes-ui-v1-lot2.md §6 : « pas le composant de
+# confirmation destructive... pas de choix Annuler/Confirmer, une seule
+# sortie ». Ne détourne pas corrux_modal ; réutilise le même mécanisme
+# d'ouverture natif (<dialog> + modal.js, non modifié).
+
+
+@register.inclusion_tag("ui/components/info_modal.html")
+def corrux_info_modal(modal_id, title, message, items=None, close_label="Fermer", open=False):  # noqa: A002
+    """Modal d'information — un seul bouton de sortie, aucun formulaire,
+    aucune requête réseau, aucun CSRF nécessaire.
+
+    `items` : liste de chaînes affichées comme une liste à puces
+    (échappées automatiquement par le template) — ex. noms des modules
+    dépendants actifs bloquant une désactivation (TECH-007).
+    `open` (UI-203) : même mécanisme que corrux_drawer — ouverture
+    native après une action refusée, sans JavaScript.
+    """
+    return {
+        "modal_id": modal_id,
+        "title": title,
+        "message": message,
+        "items": items or [],
+        "close_label": close_label,
+        "open": open,
+    }

@@ -424,6 +424,20 @@ a.corrux-button {
   margin: 0;
 }
 
+/* --- Variante Modal d'information (UI-203) --------------------------------
+   Réutilise .corrux-modal (position/panneau/backdrop) tel quel ; seule
+   la teinte de l'en-tête diffère (pas de connotation destructive). */
+
+.corrux-modal--info .corrux-modal__header {
+  color: var(--corrux-color-text-secondary);
+}
+
+.corrux-modal__list {
+  margin: var(--corrux-space-2) 0 0 0;
+  padding-left: var(--corrux-space-5);
+  color: var(--corrux-color-text-primary);
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 

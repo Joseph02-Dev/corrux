@@ -21,4 +21,11 @@ urlpatterns = [
         views.user_deactivate,
         name="ui-user-deactivate",
     ),
+    path("modules/", views.module_list, name="ui-module-list"),
+    path("modules/<str:module_id>/activer/", views.module_activate, name="ui-module-activate"),
+    path(
+        "modules/<str:module_id>/desactiver/",
+        views.module_deactivate,
+        name="ui-module-deactivate",
+    ),
 ]
