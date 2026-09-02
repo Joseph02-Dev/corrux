@@ -27,7 +27,10 @@ quelle, pas contournée par un mécanisme de rollback inventé.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from django.db import transaction
+from django.db.models import Q
 
 from core.identity.models import User
 from core.storage import files as storage
@@ -137,3 +140,89 @@ def list_folder_contents(folder: Folder | None) -> tuple[list[Document], list[Fo
     documents = list(Document.objects.filter(folder=folder).order_by("filename"))
     subfolders = list(Folder.objects.filter(parent_folder=folder).order_by("name"))
     return documents, subfolders
+
+
+# ============================================================================
+# Recherche documentaire — TECH-022
+# ============================================================================
+#
+# Backend pur, lecture seule : aucun accès filesystem (jamais
+# storage.read()/Document.storage_path comme chemin), aucun audit,
+# aucune modification de core.authz. Le filtrage par permission est
+# appliqué DANS la requête ORM (jamais après coup, jamais un filtrage
+# côté appelant) — conforme au critère d'acceptation explicite du
+# ticket : « un document hors permission n'apparaît jamais, même par
+# mot-clé exact ».
+#
+# Portée du filtrage par permission (décision Phase 2, documentée, pas
+# silencieuse) : DocumentPermission ciblant DIRECTEMENT le document
+# recherché (action="read", pour un rôle de l'utilisateur ou pour
+# l'utilisateur individuellement) + accès implicite du propriétaire
+# (Document.owner_user — confirmé par maquettes-ui-v1-lot3.md §4 :
+# « liste vide -> au moins un accès (le propriétaire) »). Aucun
+# héritage depuis une permission portée par le dossier parent n'est
+# appliqué : aucune source consultée ne le confirme, et le contrat
+# interdit explicitement d'anticiper une règle de TECH-023 au-delà du
+# strict nécessaire. TECH-022 ne crée aucun nouveau moteur RBAC objet,
+# ne modifie pas core/authz/engine.py, et core.authz.has_permission()
+# n'est pas utilisé ici (il n'a aucune notion d'objet spécifique — seule
+# DocumentPermission, propre au schéma documentation, le permet).
+
+_NO_FOLDER_FILTER = object()  # sentinel : distinct de None (= racine)
+
+
+def search_documents(
+    *,
+    user: User,
+    keyword: str = "",
+    mime_type: str = "",
+    folder: Folder | None = _NO_FOLDER_FILTER,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+) -> list[Document]:
+    """Recherche filtrable par mot-clé/type/dossier/date, résultats
+    toujours filtrés par permission (jamais de document interdit dans
+    le résultat, quel que soit le critère de recherche).
+
+    - `keyword` : correspondance partielle, insensible à la casse, sur
+      `Document.filename` OU `DocumentMetadata.value` (un même mot-clé
+      retrouve un document par son nom ou par une métadonnée).
+    - `mime_type` : correspondance exacte.
+    - `folder` : paramètre absent (défaut) = aucun filtre de dossier ;
+      `None` = uniquement les documents à la racine ; `Folder` =
+      documents directement dans ce dossier — jamais récursif dans les
+      sous-dossiers (décision Phase 2, limite le périmètre de ce
+      ticket).
+    - `created_after`/`created_before` : bornes sur `Document.created_at`.
+
+    Tous les filtres fournis sont combinés par ET. Résultat dédupliqué
+    (`distinct()`) et trié par nom de fichier (ordre déterministe le
+    plus simple, aucune convention de tri n'existe pour Document).
+    """
+    role_ids = user.user_roles.values_list("role_id", flat=True)
+
+    permission_filter = (
+        Q(owner_user=user)
+        | Q(permissions__action="read", permissions__role_id__in=role_ids)
+        | Q(permissions__action="read", permissions__user=user)
+    )
+    queryset = Document.objects.filter(permission_filter)
+
+    if keyword:
+        queryset = queryset.filter(
+            Q(filename__icontains=keyword) | Q(metadata_entries__value__icontains=keyword)
+        )
+
+    if mime_type:
+        queryset = queryset.filter(mime_type=mime_type)
+
+    if folder is not _NO_FOLDER_FILTER:
+        queryset = queryset.filter(folder=folder)
+
+    if created_after is not None:
+        queryset = queryset.filter(created_at__gte=created_after)
+
+    if created_before is not None:
+        queryset = queryset.filter(created_at__lte=created_before)
+
+    return list(queryset.distinct().order_by("filename"))
