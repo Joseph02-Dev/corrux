@@ -470,6 +470,23 @@ a.corrux-button {
   color: var(--corrux-color-text-primary);
 }
 
+/* --- Ligne de filtres (UI-206) ---------------------------------------
+   Générique dans son principe (alignement de plusieurs corrux_field en
+   ligne + un bouton) mais nommée pour son seul consommateur réel
+   actuel — pas de système de filtres générique inventé. */
+
+.corrux-audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--corrux-space-3);
+  margin-bottom: var(--corrux-space-4);
+}
+
+.corrux-audit-filters .corrux-field {
+  min-width: 160px;
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 

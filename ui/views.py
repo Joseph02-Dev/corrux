@@ -7,6 +7,7 @@ core.identity/core.authz (TECH-002/003/008) comme unique autorité.
 """
 
 import secrets
+from datetime import datetime
 from pathlib import PurePosixPath
 
 from django.db import IntegrityError, transaction
@@ -19,6 +20,7 @@ from django.utils.formats import date_format
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
+from core.audit.models import AuditLog
 from core.audit.service import record_audit_event
 from core.authz.decorators import require_permission
 from core.authz.engine import has_permission
@@ -824,10 +826,12 @@ _BACKUP_STATUS_TONE = {
 }
 
 
-def _format_backup_datetime(value):
+def _format_datetime(value):
     """Même mécanisme que le filtre de template |date (déjà utilisé en
     UI-105, ui/templates/ui/profile.html) : conversion vers le fuseau
-    local configuré (Europe/Paris, USE_TZ=True) puis format d/m/Y H:i."""
+    local configuré (Europe/Paris, USE_TZ=True) puis format d/m/Y H:i.
+    Générique — introduit en UI-205, réutilisé tel quel par UI-206
+    (Journal d'audit) : aucun nouveau format global créé."""
     return date_format(timezone.localtime(value), "d/m/Y H:i")
 
 
@@ -899,7 +903,7 @@ def backup_list(request):
     last_run = runs[0] if runs else None
 
     last_success_value = (
-        _format_backup_datetime(last_success.started_at)
+        _format_datetime(last_success.started_at)
         if last_success is not None
         else "Aucun succès enregistré"
     )
@@ -909,7 +913,7 @@ def backup_list(request):
     table_rows = [
         ui_tags.TableRow(
             cells=(
-                _format_backup_datetime(run.started_at),
+                _format_datetime(run.started_at),
                 _format_backup_duration(run.started_at, run.finished_at),
                 _backup_status_badge_html(run),
                 _format_backup_size(run.size_bytes),
@@ -928,3 +932,153 @@ def backup_list(request):
         "table_rows": table_rows,
     }
     return render(request, "ui/backups/list.html", context)
+
+
+# ============================================================================
+# UI-206 — Journal d'audit
+# ============================================================================
+#
+# Écran strictement en lecture : aucun POST, aucun record_audit_event()
+# ici. AuditLog n'a pas de Meta.ordering (contrairement à BackupRun) :
+# tri explicite -timestamp obligatoire. metadata["status"] n'est ni un
+# champ structurel ni cohérent entre actions — le mapping ci-dessous est
+# une normalisation de présentation uniquement, AuditLog et les
+# producteurs d'événements ne sont pas modifiés.
+
+_AUDIT_RESULT_MAP = {
+    "success": ("Succès", "success"),
+    "failure": ("Échec", "error"),
+    "denied": ("Refusé", "warning"),
+    "refused": ("Refusé", "warning"),
+}
+_AUDIT_DEFAULT_RESULT = ("Succès", "success")  # absence de status (ex. user.*)
+
+_AUDIT_ACTOR_SYSTEM_VALUE = "system"
+
+
+def _audit_result_badge_html(entry):
+    status = (entry.metadata or {}).get("status")
+    label, tone = _AUDIT_RESULT_MAP.get(status, _AUDIT_DEFAULT_RESULT)
+    return _component_html(
+        "ui/components/badge.html", ui_tags.corrux_badge, label=label, tone=tone
+    )
+
+
+def _audit_actor_label(entry):
+    return "Système" if entry.actor_user is None else entry.actor_user.full_name
+
+
+def _audit_action_filter_options():
+    """Dérivées des actions réellement présentes en base — jamais une
+    liste statique. Tri déterministe (alphabétique)."""
+    actions = (
+        AuditLog.objects.order_by("action").values_list("action", flat=True).distinct()
+    )
+    return [("", "Toutes")] + [(a, a) for a in actions]
+
+
+def _audit_actor_filter_options():
+    """« Système » (acteur nul, TECH-009) + les utilisateurs réels ayant
+    au moins un événement, triés par nom."""
+    options = [("", "Tous"), (_AUDIT_ACTOR_SYSTEM_VALUE, "Système")]
+    actor_ids = (
+        AuditLog.objects.exclude(actor_user__isnull=True)
+        .values_list("actor_user_id", flat=True)
+        .distinct()
+    )
+    for user in User.objects.filter(pk__in=actor_ids).order_by("full_name"):
+        options.append((str(user.id), user.full_name))
+    return options
+
+
+def _parse_audit_filter_date(value):
+    """Une date GET absente ou invalide est ignorée silencieusement
+    (filtre non appliqué) — jamais une erreur 500 sur une entrée
+    utilisateur, comportement le plus simple et sûr, sans nouveau
+    composant de validation."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+@require_GET
+def audit_list(request):
+    """Journal d'audit — UI-206.
+
+    Permission de lecture vérifiée manuellement (comme user_list/
+    module_list/backup_list) pour afficher corrux_permission_denied
+    plutôt qu'un 403 JSON sur ce point d'entrée principal.
+    @require_GET : aucune mutation possible, une tentative POST doit
+    être rejetée (405).
+    """
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-audit-list')}")
+
+    if not has_permission(request.corrux_user, "core.audit.read"):
+        return render(
+            request, "ui/audit/list.html", {"permission_denied": True}, status=403
+        )
+
+    selected_action = request.GET.get("action", "")
+    selected_actor = request.GET.get("actor", "")
+    from_raw = request.GET.get("from", "")
+    to_raw = request.GET.get("to", "")
+
+    entries = AuditLog.objects.select_related("actor_user").order_by("-timestamp")
+
+    if selected_action:
+        entries = entries.filter(action=selected_action)
+
+    if selected_actor == _AUDIT_ACTOR_SYSTEM_VALUE:
+        entries = entries.filter(actor_user__isnull=True)
+    elif selected_actor:
+        # Jamais confiance en la valeur brute du client : validée comme
+        # un identifiant réel avant d'être utilisée dans la requête ;
+        # une valeur invalide est ignorée (filtre non appliqué), jamais
+        # transmise telle quelle à l'ORM.
+        try:
+            actor_id = int(selected_actor)
+        except ValueError:
+            selected_actor = ""
+        else:
+            entries = entries.filter(actor_user_id=actor_id)
+
+    from_date = _parse_audit_filter_date(from_raw)
+    if from_date is not None:
+        entries = entries.filter(timestamp__date__gte=from_date)
+
+    to_date = _parse_audit_filter_date(to_raw)
+    if to_date is not None:
+        entries = entries.filter(timestamp__date__lte=to_date)
+
+    entries = list(entries)
+
+    table_rows = [
+        ui_tags.TableRow(
+            cells=(
+                _format_datetime(entry.timestamp),
+                _audit_actor_label(entry),
+                entry.action,
+                entry.target,
+                _audit_result_badge_html(entry),
+            ),
+        )
+        for entry in entries
+    ]
+
+    context = {
+        "table_headers": ["Date/heure", "Utilisateur", "Action", "Ressource", "Résultat"],
+        "table_rows": table_rows,
+        "entries_empty": not entries,
+        "action_options": _audit_action_filter_options(),
+        "actor_options": _audit_actor_filter_options(),
+        "selected_action": selected_action,
+        "selected_actor": selected_actor,
+        "from_value": from_raw if from_date is not None else "",
+        "to_value": to_raw if to_date is not None else "",
+    }
+    return render(request, "ui/audit/list.html", context)

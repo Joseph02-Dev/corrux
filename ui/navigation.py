@@ -67,7 +67,7 @@ def get_navigation(user: User | None) -> tuple[NavGroup, ...]:
     if has_permission(user, "core.backup.read"):
         admin_items.append(NavItem("Sauvegardes", "/sauvegardes/", "check"))
     if has_permission(user, "core.audit.read"):
-        admin_items.append(NavItem("Journal d'audit", "#", "search"))
+        admin_items.append(NavItem("Journal d'audit", "/journal-audit/", "search"))
     if admin_items:
         groups.append(NavGroup("Administration", tuple(admin_items)))
 

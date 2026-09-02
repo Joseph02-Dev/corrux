@@ -29,4 +29,5 @@ urlpatterns = [
         name="ui-module-deactivate",
     ),
     path("sauvegardes/", views.backup_list, name="ui-backup-list"),
+    path("journal-audit/", views.audit_list, name="ui-audit-list"),
 ]

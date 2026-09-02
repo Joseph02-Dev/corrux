@@ -1,0 +1,26 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Journal d'audit — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    <h1 class="corrux-h1">Journal d'audit</h1>
+
+    <form method="get" class="corrux-audit-filters">
+      {% corrux_field label="Action" name="action" field_id="id_filter_action" input_type="select" options=action_options value=selected_action %}
+      {% corrux_field label="Utilisateur" name="actor" field_id="id_filter_actor" input_type="select" options=actor_options value=selected_actor %}
+      {% corrux_field label="Du" name="from" field_id="id_filter_from" input_type="date" value=from_value %}
+      {% corrux_field label="Au" name="to" field_id="id_filter_to" input_type="date" value=to_value %}
+      {% corrux_button label="Filtrer" variant="primary" type="submit" %}
+    </form>
+
+    {% if entries_empty %}
+      {% corrux_empty_state message="Aucun événement ne correspond." %}
+    {% else %}
+      {% corrux_table headers=table_headers rows=table_rows %}
+    {% endif %}
+  {% endif %}
+{% endblock %}
