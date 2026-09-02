@@ -188,9 +188,17 @@ class TestProfilePage:
         assert response.url == f"{LOGIN_URL}?next={PROFILE_URL}"
 
     def test_shows_account_creation_date(self, active_user):
+        """Conversion vers le fuseau local (Europe/Paris) avant formatage
+        — comme le fait réellement le rendu (filtre |date). Bug
+        pré-existant corrigé ici : une comparaison naïve en UTC pouvait
+        échouer près de minuit UTC, où la date locale diffère de la date
+        UTC (ex. 23h41 UTC = 01h41 CEST le jour suivant)."""
+        from django.utils import timezone
+
         client = _authenticated_client(active_user)
         content = client.get(PROFILE_URL).content.decode()
-        assert active_user.created_at.strftime("%d/%m/%Y") in content
+        local_created_at = timezone.localtime(active_user.created_at)
+        assert local_created_at.strftime("%d/%m/%Y") in content
 
     def test_uses_the_shell_topbar_and_sidebar(self, active_user):
         client = _authenticated_client(active_user)

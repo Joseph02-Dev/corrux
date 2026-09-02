@@ -1,0 +1,21 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Rôles — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    <div class="corrux-tabs" role="tablist" aria-label="Administration des comptes">
+      <a href="/utilisateurs/" class="corrux-tabs__tab" role="tab" aria-selected="false">
+        Utilisateurs
+      </a>
+      <span class="corrux-tabs__tab" role="tab" aria-selected="true">Rôles</span>
+    </div>
+
+    <h1 class="corrux-h1">Rôles</h1>
+
+    {% corrux_table headers=role_table_headers rows=role_table_rows %}
+  {% endif %}
+{% endblock %}

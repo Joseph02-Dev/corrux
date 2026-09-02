@@ -1,0 +1,18 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Matrice de permissions — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    <h1 class="corrux-h1">Matrice de permissions</h1>
+    <p class="corrux-text-small">Réservé à l'Administrateur.</p>
+
+    {% for group in groups %}
+      <h2 class="corrux-h2">{{ group.label }}</h2>
+      {% corrux_table headers=group.headers rows=group.rows %}
+    {% endfor %}
+  {% endif %}
+{% endblock %}

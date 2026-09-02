@@ -449,3 +449,23 @@ def corrux_stat_card(label, value):
     HTML de confiance déjà rendu).
     """
     return {"label": label, "value": value}
+
+
+@register.inclusion_tag("ui/components/permission_cell.html")
+def corrux_permission_cell(role_id, module_id, resource, action, granted, toggle_url):
+    """Cellule togglable de la matrice de permissions — UI-202.
+
+    Un formulaire minimal par cellule (zéro JavaScript) : la bascule
+    est un aller-retour serveur, comme toute autre mutation du projet.
+    `granted` détermine uniquement le rendu visuel/accessible ; la
+    décision réelle (créer/supprimer la RolePermission) est prise côté
+    serveur par la vue cible, jamais ici.
+    """
+    return {
+        "role_id": role_id,
+        "module_id": module_id,
+        "resource": resource,
+        "action": action,
+        "granted": granted,
+        "toggle_url": toggle_url,
+    }

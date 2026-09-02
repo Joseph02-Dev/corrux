@@ -8,15 +8,15 @@
     {% corrux_permission_denied %}
   {% else %}
     {% comment %}
-    Tabs minimales — UI-201. Pattern volontairement non générique : un
-    seul consommateur réel aujourd'hui. « Rôles » n'est pas un lien
-    (UI-202 non implémenté) — jamais présenté comme navigable.
+    Tabs — UI-201/202. Pattern volontairement non générique : un seul
+    consommateur réel aujourd'hui (Utilisateurs & rôles). L'onglet actif
+    reste un <span> (déjà là), l'autre un vrai lien.
     {% endcomment %}
     <div class="corrux-tabs" role="tablist" aria-label="Administration des comptes">
       <span class="corrux-tabs__tab" role="tab" aria-selected="true">Utilisateurs</span>
-      <span class="corrux-tabs__tab" role="tab" aria-selected="false" aria-disabled="true">
+      <a href="/utilisateurs/roles/" class="corrux-tabs__tab" role="tab" aria-selected="false">
         Rôles
-      </span>
+      </a>
     </div>
 
     <h1 class="corrux-h1">Utilisateurs & rôles</h1>

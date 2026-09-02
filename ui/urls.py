@@ -21,6 +21,13 @@ urlpatterns = [
         views.user_deactivate,
         name="ui-user-deactivate",
     ),
+    path("utilisateurs/roles/", views.role_list, name="ui-role-list"),
+    path("utilisateurs/roles/matrice/", views.role_matrix, name="ui-role-matrix"),
+    path(
+        "utilisateurs/roles/matrice/toggler/",
+        views.role_matrix_toggle,
+        name="ui-role-matrix-toggle",
+    ),
     path("modules/", views.module_list, name="ui-module-list"),
     path("modules/<str:module_id>/activer/", views.module_activate, name="ui-module-activate"),
     path(

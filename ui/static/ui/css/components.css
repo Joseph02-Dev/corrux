@@ -487,6 +487,35 @@ a.corrux-button {
   min-width: 160px;
 }
 
+/* --- Cellule togglable de la matrice de permissions (UI-202) --------- */
+
+.corrux-permission-cell {
+  display: inline-block;
+}
+
+.corrux-permission-cell__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-sm);
+  background-color: var(--corrux-color-surface-0);
+  color: transparent;
+  cursor: pointer;
+}
+
+.corrux-permission-cell__toggle:hover {
+  border-color: var(--corrux-color-border-strong);
+}
+
+.corrux-permission-cell__toggle--on {
+  background-color: var(--corrux-color-primary);
+  border-color: var(--corrux-color-primary);
+  color: var(--corrux-color-text-on-primary);
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 
@@ -602,6 +631,7 @@ a.corrux-button {
   font-weight: var(--corrux-font-weight-medium);
   color: var(--corrux-color-text-secondary);
   border-bottom: 2px solid transparent;
+  text-decoration: none;
 }
 
 .corrux-tabs__tab[aria-selected="true"] {

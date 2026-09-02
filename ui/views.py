@@ -24,7 +24,7 @@ from core.audit.models import AuditLog
 from core.audit.service import record_audit_event
 from core.authz.decorators import require_permission
 from core.authz.engine import has_permission
-from core.authz.models import Role, UserRole
+from core.authz.models import Permission, Role, RolePermission, UserRole
 from core.backup.models import BackupRun
 from core.identity import auth
 from core.identity.models import User
@@ -1082,3 +1082,182 @@ def audit_list(request):
         "to_value": to_raw if to_date is not None else "",
     }
     return render(request, "ui/audit/list.html", context)
+
+
+# ============================================================================
+# UI-202 — Rôles : liste + Matrice de permissions
+# ============================================================================
+#
+# « Onglet Rôles » du même écran que UI-201 (Utilisateurs & rôles) — même
+# permission de lecture (core.user.read). La matrice avancée est réservée
+# à l'Administrateur (core.role.write, décision produit #2 déjà validée) :
+# aucun affichage, même en lecture seule, sans cette permission.
+#
+# Codes de permission canoniques : dérivés des codes réellement utilisés
+# dans le code applicatif (ui/navigation.py, décorateurs de vues), jamais
+# inventés. Groupés par module pour l'affichage (Administration /
+# Documentation / Ressources humaines), conformément à la maquette.
+
+_PREDEFINED_ROLE_NAMES = ("Administrateur", "Administrateur RH", "Valideur", "Employé")
+
+_PERMISSION_MATRIX_GROUPS = (
+    (
+        "Administration",
+        "core",
+        (
+            ("user", "read", "Utilisateurs — Lecture"),
+            ("user", "write", "Utilisateurs — Écriture"),
+            ("module", "read", "Modules — Lecture"),
+            ("module", "write", "Modules — Écriture"),
+            ("backup", "read", "Sauvegardes — Lecture"),
+            ("audit", "read", "Journal d'audit — Lecture"),
+        ),
+    ),
+    (
+        "Documentation",
+        "documentation",
+        (("document", "read", "Documents — Lecture"),),
+    ),
+    (
+        "Ressources humaines",
+        "rh",
+        (
+            ("employe", "lire", "Employés — Lecture"),
+            ("conge", "lire", "Congés — Lecture"),
+        ),
+    ),
+)
+
+
+def _predefined_roles_ordered():
+    roles_by_name = {r.name: r for r in Role.objects.filter(name__in=_PREDEFINED_ROLE_NAMES)}
+    return [roles_by_name[name] for name in _PREDEFINED_ROLE_NAMES if name in roles_by_name]
+
+
+def role_list(request):
+    """Liste des 4 rôles prédéfinis — même permission que UI-201
+    (core.user.read), c'est le même écran, un autre onglet. Réutilise
+    corrux_table (patron déjà établi par UI-203 pour les « cartes » de
+    la maquette), aucun nouveau composant visuel de carte."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-role-list')}")
+
+    if not has_permission(request.corrux_user, "core.user.read"):
+        return render(
+            request, "ui/users/roles_list.html", {"permission_denied": True}, status=403
+        )
+
+    can_view_matrix = has_permission(request.corrux_user, "core.role.write")
+    roles = _predefined_roles_ordered()
+    role_table_rows = [
+        ui_tags.TableRow(
+            cells=(
+                role.name,
+                role.description or "—",
+                str(role.user_roles.count()),
+                (
+                    _component_html(
+                        "ui/components/button.html",
+                        ui_tags.corrux_button,
+                        label="Voir les permissions",
+                        variant="tertiary",
+                        href=reverse("ui-role-matrix"),
+                    )
+                    if can_view_matrix
+                    else "—"
+                ),
+            ),
+        )
+        for role in roles
+    ]
+    context = {
+        "role_table_headers": ["Nom", "Description", "Utilisateurs", "Actions"],
+        "role_table_rows": role_table_rows,
+    }
+    return render(request, "ui/users/roles_list.html", context)
+
+
+def role_matrix(request):
+    """Matrice module × ressource × action — réservée à core.role.write.
+
+    Aucun affichage, même en lecture seule, hors de cette permission
+    (décision produit #2, déjà validée en ux-ui-design-v1.md)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-role-matrix')}")
+
+    if not has_permission(request.corrux_user, "core.role.write"):
+        return render(
+            request, "ui/users/roles_matrix.html", {"permission_denied": True}, status=403
+        )
+
+    roles = _predefined_roles_ordered()
+    granted = set(
+        RolePermission.objects.filter(role__in=roles).values_list(
+            "role_id", "permission__module_id", "permission__resource", "permission__action"
+        )
+    )
+
+    toggle_url = reverse("ui-role-matrix-toggle")
+    groups = []
+    for group_label, module_id, codes in _PERMISSION_MATRIX_GROUPS:
+        rows = []
+        for resource, action, row_label in codes:
+            cells = tuple(
+                _component_html(
+                    "ui/components/permission_cell.html",
+                    ui_tags.corrux_permission_cell,
+                    role_id=role.id,
+                    module_id=module_id,
+                    resource=resource,
+                    action=action,
+                    granted=(role.id, module_id, resource, action) in granted,
+                    toggle_url=toggle_url,
+                )
+                for role in roles
+            )
+            rows.append(ui_tags.TableRow(cells=(row_label, *cells)))
+        groups.append(
+            {
+                "label": group_label,
+                "headers": ["Permission", *(role.name for role in roles)],
+                "rows": rows,
+            }
+        )
+
+    context = {"groups": groups}
+    return render(request, "ui/users/roles_matrix.html", context)
+
+
+@require_permission("core.role.write")
+@require_POST
+def role_matrix_toggle(request):
+    """Bascule une cellule de la matrice — reflète immédiatement sur le
+    moteur authz (has_permission), critère d'acceptation UI-202."""
+    role = get_object_or_404(Role, pk=request.POST.get("role_id"))
+    module_id = request.POST.get("module_id", "")
+    resource = request.POST.get("resource", "")
+    action = request.POST.get("action", "")
+    code = f"{module_id}.{resource}.{action}"
+
+    with transaction.atomic():
+        permission, _ = Permission.objects.get_or_create(
+            module_id=module_id, resource=resource, action=action
+        )
+        existing = RolePermission.objects.filter(role=role, permission=permission).first()
+        if existing:
+            existing.delete()
+            audit_action = "role.permission_revoke"
+        else:
+            RolePermission.objects.create(role=role, permission=permission)
+            audit_action = "role.permission_grant"
+
+        record_audit_event(
+            actor=request.corrux_user,
+            action=audit_action,
+            target=role.name,
+            metadata={"permission": code},
+        )
+
+    return HttpResponseRedirect(reverse("ui-role-matrix"))
