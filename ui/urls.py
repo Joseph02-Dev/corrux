@@ -28,4 +28,5 @@ urlpatterns = [
         views.module_deactivate,
         name="ui-module-deactivate",
     ),
+    path("sauvegardes/", views.backup_list, name="ui-backup-list"),
 ]

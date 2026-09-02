@@ -7,19 +7,23 @@ core.identity/core.authz (TECH-002/003/008) comme unique autorité.
 """
 
 import secrets
+from pathlib import PurePosixPath
 
 from django.db import IntegrityError, transaction
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from core.audit.service import record_audit_event
 from core.authz.decorators import require_permission
 from core.authz.engine import has_permission
 from core.authz.models import Role, UserRole
+from core.backup.models import BackupRun
 from core.identity import auth
 from core.identity.models import User
 from core.modules.manager import (
@@ -801,3 +805,126 @@ def module_deactivate(request, module_id):
         )
 
     return HttpResponseRedirect(reverse("ui-module-list"))
+
+
+# ============================================================================
+# UI-205 — Sauvegardes
+# ============================================================================
+#
+# Écran strictement en lecture : aucune mutation, aucun POST, aucun
+# record_audit_event() ici. run_backup() (TECH-009) reste l'unique
+# primitive créant un BackupRun — déclenchée exclusivement par
+# corrux-backup.service (systemd), jamais depuis cette vue. Cette vue ne
+# fait que lire core.backup_runs et mettre en forme les champs réels.
+
+_BACKUP_STATUS_TONE = {
+    BackupRun.Status.SUCCESS: "success",
+    BackupRun.Status.FAILURE: "error",
+    BackupRun.Status.REFUSED: "warning",
+}
+
+
+def _format_backup_datetime(value):
+    """Même mécanisme que le filtre de template |date (déjà utilisé en
+    UI-105, ui/templates/ui/profile.html) : conversion vers le fuseau
+    local configuré (Europe/Paris, USE_TZ=True) puis format d/m/Y H:i."""
+    return date_format(timezone.localtime(value), "d/m/Y H:i")
+
+
+def _format_backup_duration(started_at, finished_at):
+    total_seconds = int((finished_at - started_at).total_seconds())
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours} h {minutes:02d} min"
+    if minutes:
+        return f"{minutes} min {seconds:02d} s"
+    return f"{seconds} s"
+
+
+def _format_backup_size(size_bytes):
+    """`size_bytes` absent (échec/refus, cf. modèle) -> valeur neutre.
+    Aucune autre donnée que le champ réel, seule l'unité affichée varie."""
+    if size_bytes is None:
+        return "—"
+    value = float(size_bytes)
+    units = ("o", "Ko", "Mo", "Go", "To")
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{int(value)} {unit}" if unit == "o" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} {units[-1]}"  # pragma: no cover
+
+
+def _backup_destination_dir(run):
+    """Répertoire parent de `location` — affichage uniquement, jamais
+    utilisé pour un accès filesystem (cf. contrat UI-205 §11)."""
+    if not run or not run.location:
+        return "—"
+    return str(PurePosixPath(run.location).parent)
+
+
+def _backup_status_badge_html(run):
+    return _component_html(
+        "ui/components/badge.html",
+        ui_tags.corrux_badge,
+        label=run.get_status_display(),
+        tone=_BACKUP_STATUS_TONE.get(run.status, "neutral"),
+    )
+
+
+@require_GET
+def backup_list(request):
+    """Historique des sauvegardes — UI-205.
+
+    @require_GET : écran strictement en lecture, aucune mutation
+    possible — une tentative POST doit être rejetée (405), conformément
+    au contrat. Permission de lecture vérifiée manuellement (comme
+    user_list/module_list) pour afficher corrux_permission_denied
+    (UI-104) plutôt qu'un 403 JSON brut sur ce point d'entrée principal.
+    """
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-backup-list')}")
+
+    if not has_permission(request.corrux_user, "core.backup.read"):
+        return render(
+            request, "ui/backups/list.html", {"permission_denied": True}, status=403
+        )
+
+    # Meta.ordering = ["-started_at"] (core/backup/models.py) : déjà
+    # trié du plus récent au plus ancien, aucun tri parallèle nécessaire.
+    runs = list(BackupRun.objects.all())
+    last_success = next((r for r in runs if r.status == BackupRun.Status.SUCCESS), None)
+    last_run = runs[0] if runs else None
+
+    last_success_value = (
+        _format_backup_datetime(last_success.started_at)
+        if last_success is not None
+        else "Aucun succès enregistré"
+    )
+    status_value = _backup_status_badge_html(last_run) if last_run is not None else "—"
+    destination_value = _backup_destination_dir(last_success)
+
+    table_rows = [
+        ui_tags.TableRow(
+            cells=(
+                _format_backup_datetime(run.started_at),
+                _format_backup_duration(run.started_at, run.finished_at),
+                _backup_status_badge_html(run),
+                _format_backup_size(run.size_bytes),
+                _backup_destination_dir(run),
+            ),
+        )
+        for run in runs
+    ]
+
+    context = {
+        "runs_empty": not runs,
+        "last_success_value": last_success_value,
+        "status_value": status_value,
+        "destination_value": destination_value,
+        "table_headers": ["Date/heure", "Durée", "Statut", "Taille", "Destination"],
+        "table_rows": table_rows,
+    }
+    return render(request, "ui/backups/list.html", context)

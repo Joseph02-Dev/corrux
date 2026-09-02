@@ -438,6 +438,38 @@ a.corrux-button {
   color: var(--corrux-color-text-primary);
 }
 
+/* --- Carte de synthèse générique (UI-205) ---------------------------------
+   Purement présentationnelle, aucune connaissance métier. */
+
+.corrux-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--corrux-space-4);
+  margin-bottom: var(--corrux-space-5);
+}
+
+.corrux-stat-card {
+  padding: var(--corrux-space-4);
+  background-color: var(--corrux-color-surface-0);
+  border: 1px solid var(--corrux-color-border);
+  border-radius: var(--corrux-radius-md);
+}
+
+.corrux-stat-card__label {
+  margin: 0 0 var(--corrux-space-2) 0;
+  font-size: var(--corrux-font-size-small);
+  font-weight: var(--corrux-font-weight-medium);
+  color: var(--corrux-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.corrux-stat-card__value {
+  font-size: var(--corrux-font-size-h2);
+  font-weight: var(--corrux-font-weight-bold);
+  color: var(--corrux-color-text-primary);
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 

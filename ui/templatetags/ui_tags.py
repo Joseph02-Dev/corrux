@@ -430,3 +430,22 @@ def corrux_info_modal(modal_id, title, message, items=None, close_label="Fermer"
         "close_label": close_label,
         "open": open,
     }
+
+
+# --- Carte de synthèse générique (UI-205) -----------------------------------
+# Purement présentationnel : label + valeur, aucune connaissance d'aucun
+# domaine (pas de référence à BackupRun ni à quoi que ce soit d'autre) —
+# réutilisable par tout futur écran ayant besoin d'un résumé chiffré/
+# textuel (ex. UI-206).
+
+
+@register.inclusion_tag("ui/components/stat_card.html")
+def corrux_stat_card(label, value):
+    """Carte de synthèse — un label et une valeur, rien d'autre.
+
+    Aucune permission, aucune action, aucune donnée en dur : la valeur
+    est entièrement fournie par l'appelant (déjà mise en forme si
+    nécessaire, ex. une date déjà formatée ou un fragment de badge
+    HTML de confiance déjà rendu).
+    """
+    return {"label": label, "value": value}
