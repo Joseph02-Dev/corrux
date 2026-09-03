@@ -1,0 +1,20 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Documents — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    {% corrux_breadcrumb items=breadcrumb_items %}
+
+    <h1 class="corrux-h1">Documents</h1>
+
+    {% if is_empty %}
+      {% corrux_empty_state message="Ce dossier est vide." %}
+    {% else %}
+      {% corrux_table headers=table_headers rows=table_rows %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

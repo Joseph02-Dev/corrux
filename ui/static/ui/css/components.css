@@ -516,6 +516,32 @@ a.corrux-button {
   color: var(--corrux-color-text-on-primary);
 }
 
+/* --- Fil d'Ariane (UI-301) --------------------------------------------- */
+
+.corrux-breadcrumb {
+  margin-bottom: var(--corrux-space-4);
+  font-size: var(--corrux-font-size-small);
+}
+
+.corrux-breadcrumb__item {
+  color: var(--corrux-color-text-secondary);
+  text-decoration: none;
+}
+
+.corrux-breadcrumb__item:hover {
+  text-decoration: underline;
+}
+
+.corrux-breadcrumb__item--current {
+  color: var(--corrux-color-text-primary);
+  font-weight: var(--corrux-font-weight-medium);
+}
+
+.corrux-breadcrumb__separator {
+  margin: 0 var(--corrux-space-2);
+  color: var(--corrux-color-text-muted);
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 

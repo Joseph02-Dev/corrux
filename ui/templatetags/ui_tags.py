@@ -469,3 +469,14 @@ def corrux_permission_cell(role_id, module_id, resource, action, granted, toggle
         "granted": granted,
         "toggle_url": toggle_url,
     }
+
+
+@register.inclusion_tag("ui/components/breadcrumb.html")
+def corrux_breadcrumb(items):
+    """Fil d'Ariane — UI-301.
+
+    `items` : liste de tuples (label, url). Le dernier élément (position
+    actuelle) n'est jamais un lien même si une url est fournie — un seul
+    composant, réutilisable par tout futur écran à arborescence (ex.
+    future navigation RH)."""
+    return {"items": items}

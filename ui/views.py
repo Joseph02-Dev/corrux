@@ -35,6 +35,13 @@ from core.modules.manager import (
     deactivate_module,
 )
 from core.modules.models import Module
+from modules.documentation.models import Folder
+from modules.documentation.services import (
+    folder_breadcrumb,
+    has_folder_permission,
+    list_visible_folder_contents,
+)
+from ui.navigation import module_is_activated
 from ui.templatetags import ui_tags
 
 # Provisoire : aucune page d'accueil/tableau de bord réelle n'existe
@@ -846,9 +853,12 @@ def _format_backup_duration(started_at, finished_at):
     return f"{seconds} s"
 
 
-def _format_backup_size(size_bytes):
-    """`size_bytes` absent (échec/refus, cf. modèle) -> valeur neutre.
-    Aucune autre donnée que le champ réel, seule l'unité affichée varie."""
+def _format_file_size(size_bytes):
+    """`size_bytes` absent (échec/refus de sauvegarde, cf. modèle
+    BackupRun) -> valeur neutre. Aucune autre donnée que le champ réel,
+    seule l'unité affichée varie. Générique — introduit en UI-205,
+    réutilisé tel quel par UI-301 (Document.size_bytes, toujours
+    renseigné) : aucun nouveau format créé."""
     if size_bytes is None:
         return "—"
     value = float(size_bytes)
@@ -916,7 +926,7 @@ def backup_list(request):
                 _format_datetime(run.started_at),
                 _format_backup_duration(run.started_at, run.finished_at),
                 _backup_status_badge_html(run),
-                _format_backup_size(run.size_bytes),
+                _format_file_size(run.size_bytes),
                 _backup_destination_dir(run),
             ),
         )
@@ -1261,3 +1271,120 @@ def role_matrix_toggle(request):
         )
 
     return HttpResponseRedirect(reverse("ui-role-matrix"))
+
+
+# ============================================================================
+# UI-301 — Explorateur de documents
+# ============================================================================
+#
+# Permission d'entrée sur l'écran : documentation.document.read (même
+# code que la Sidebar, ui/navigation.py) — la maquette Lot 3 §1
+# mentionne "documentation.dossier.lire"/"documentation.document.lire"
+# (verbes français), une convention jamais utilisée nulle part ailleurs
+# dans le code réel (ui/navigation.py, manifest.yaml Documentation,
+# TECH-025) ; réutilisation explicite du code déjà en production plutôt
+# qu'une invention parallèle — signalé, pas silencieux.
+#
+# Visibilité de chaque document/dossier LISTÉ : has_document_permission/
+# has_folder_permission (TECH-023, via list_visible_folder_contents),
+# jamais la seule permission d'entrée sur l'écran — « un document sans
+# permission n'apparaît pas » (critère d'acceptation explicite).
+#
+# Le module Documentation doit être activé (comme le vérifie déjà la
+# Sidebar, ui/navigation.py::module_is_activated) — revérifié ici côté
+# serveur : la disparition du lien Sidebar seule n'est jamais un
+# contrôle d'accès suffisant.
+#
+# "Confidentiel" (badge, critère d'acceptation) : interprétation
+# documentée, pas une règle explicite des sources — un document est
+# jugé "Confidentiel" s'il porte au moins une DocumentPermission (son
+# accès a été spécifiquement configuré au-delà du seul propriétaire),
+# seul signal disponible dans le modèle réel pour cette notion.
+
+
+@require_GET
+def document_explorer(request, folder_id=None):
+    """Explorateur — navigation dossiers + liste + filtres : trois
+    zones d'un seul écran (maquette Lot 3 §1), pas trois écrans
+    distincts. Filtres (type/dossier/date/mot-clé, TECH-022) non câblés
+    ici — recherche complète = UI-305, non anticipée.
+
+    @require_GET : écran strictement en lecture, aucune mutation
+    possible ici (le dépôt/la création de dossier restent des
+    opérations backend TECH-021 sans point d'entrée HTTP dans ce
+    ticket — UI-302/UI-304)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    if not module_is_activated("documentation") or not has_permission(
+        request.corrux_user, "documentation.document.read"
+    ):
+        return render(
+            request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
+        )
+
+    folder = None
+    if folder_id is not None:
+        folder = get_object_or_404(Folder, pk=folder_id)
+        if not has_folder_permission(request.corrux_user, folder, "read"):
+            return render(
+                request,
+                "ui/documentation/explorer.html",
+                {"permission_denied": True},
+                status=403,
+            )
+
+    documents, subfolders = list_visible_folder_contents(folder, request.corrux_user)
+
+    breadcrumb_items = [("Documents", reverse("ui-document-explorer"))]
+    for ancestor in folder_breadcrumb(folder):
+        breadcrumb_items.append(
+            (ancestor.name, reverse("ui-document-explorer-folder", args=[ancestor.id]))
+        )
+
+    table_rows = []
+    for subfolder in subfolders:
+        table_rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    _component_html(
+                        "ui/components/button.html",
+                        ui_tags.corrux_button,
+                        label=subfolder.name,
+                        variant="tertiary",
+                        href=reverse("ui-document-explorer-folder", args=[subfolder.id]),
+                    ),
+                    "Dossier",
+                    "—",
+                    "—",
+                ),
+            )
+        )
+    for document in documents:
+        name_cell = document.filename
+        if document.permissions.exists():
+            name_cell += " " + _component_html(
+                "ui/components/badge.html",
+                ui_tags.corrux_badge,
+                label="Confidentiel",
+                tone="warning",
+            )
+        table_rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    name_cell,
+                    "Document",
+                    _format_file_size(document.size_bytes),
+                    _format_datetime(document.created_at),
+                ),
+            )
+        )
+
+    context = {
+        "breadcrumb_items": breadcrumb_items,
+        "table_headers": ["Nom", "Type", "Taille", "Créé le"],
+        "table_rows": table_rows,
+        "is_empty": not documents and not subfolders,
+    }
+    return render(request, "ui/documentation/explorer.html", context)

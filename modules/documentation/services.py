@@ -145,6 +145,38 @@ def list_folder_contents(folder: Folder | None) -> tuple[list[Document], list[Fo
     return documents, subfolders
 
 
+def list_visible_folder_contents(
+    folder: Folder | None, user: User
+) -> tuple[list[Document], list[Folder]]:
+    """Comme `list_folder_contents()`, filtré par permission de lecture
+    — UI-301, critère d'acceptation : « un document sans permission
+    n'apparaît pas ».
+
+    Réutilise directement `has_document_permission()`/
+    `has_folder_permission()` (TECH-023), pas une nouvelle règle : le
+    filtrage porte sur les enfants DIRECTS d'un seul dossier (borné,
+    typiquement quelques éléments pour une PME/TPE), un filtrage Python
+    par appel unitaire reste donc approprié ici — contrairement à
+    `search_documents()` qui doit filtrer sur l'ensemble du corpus et
+    justifie à ce titre sa propre requête ORM en masse
+    (`_document_read_permission_filter`)."""
+    documents, subfolders = list_folder_contents(folder)
+    visible_documents = [d for d in documents if has_document_permission(user, d, "read")]
+    visible_subfolders = [f for f in subfolders if has_folder_permission(user, f, "read")]
+    return visible_documents, visible_subfolders
+
+
+def folder_breadcrumb(folder: Folder | None) -> list[Folder]:
+    """Chemin de la racine jusqu'à `folder` inclus (liste vide = racine)
+    — UI-301, `Folder.parent_folder` déjà posé par TECH-020."""
+    path = []
+    current = folder
+    while current is not None:
+        path.append(current)
+        current = current.parent_folder
+    return list(reversed(path))
+
+
 # ============================================================================
 # Permissions par document/dossier, intégration à authz — TECH-023
 # ============================================================================

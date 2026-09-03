@@ -34,7 +34,7 @@ class NavGroup:
     items: tuple[NavItem, ...]
 
 
-def _module_is_activated(module_id: str) -> bool:
+def module_is_activated(module_id: str) -> bool:
     """Lecture directe de core.modules (TECH-005/006) — aucun état parallèle."""
     return Module.objects.filter(pk=module_id, state=Module.State.ACTIVATED).exists()
 
@@ -72,16 +72,16 @@ def get_navigation(user: User | None) -> tuple[NavGroup, ...]:
         groups.append(NavGroup("Administration", tuple(admin_items)))
 
     documentation_items: list[NavItem] = []
-    if _module_is_activated("documentation") and has_permission(
+    if module_is_activated("documentation") and has_permission(
         user, "documentation.document.read"
     ):
-        documentation_items.append(NavItem("Documents", "#", "folder"))
+        documentation_items.append(NavItem("Documents", "/documents/", "folder"))
         documentation_items.append(NavItem("Recherche", "#", "search"))
     if documentation_items:
         groups.append(NavGroup("Documentation", tuple(documentation_items)))
 
     rh_items: list[NavItem] = []
-    if _module_is_activated("rh"):
+    if module_is_activated("rh"):
         if has_permission(user, "rh.employe.lire"):
             rh_items.append(NavItem("Employés", "#", "user"))
         if has_permission(user, "rh.conge.lire"):

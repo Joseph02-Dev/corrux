@@ -37,4 +37,10 @@ urlpatterns = [
     ),
     path("sauvegardes/", views.backup_list, name="ui-backup-list"),
     path("journal-audit/", views.audit_list, name="ui-audit-list"),
+    path("documents/", views.document_explorer, name="ui-document-explorer"),
+    path(
+        "documents/dossier/<int:folder_id>/",
+        views.document_explorer,
+        name="ui-document-explorer-folder",
+    ),
 ]

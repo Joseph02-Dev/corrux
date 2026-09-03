@@ -1,0 +1,7 @@
+{% comment %}
+Fil d'Ariane — UI-301. Le dernier élément (position actuelle) n'est
+jamais un lien.
+{% endcomment %}
+<nav class="corrux-breadcrumb" aria-label="Fil d'Ariane">
+  {% for label, url in items %}{% if not forloop.last %}<a href="{{ url }}" class="corrux-breadcrumb__item">{{ label }}</a><span class="corrux-breadcrumb__separator" aria-hidden="true">›</span>{% else %}<span class="corrux-breadcrumb__item corrux-breadcrumb__item--current" aria-current="page">{{ label }}</span>{% endif %}{% endfor %}
+</nav>
