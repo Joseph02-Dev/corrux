@@ -43,4 +43,10 @@ urlpatterns = [
         views.document_explorer,
         name="ui-document-explorer-folder",
     ),
+    path("documents/deposer/", views.document_upload, name="ui-document-upload"),
+    path(
+        "documents/dossier/<int:folder_id>/deposer/",
+        views.document_upload,
+        name="ui-document-upload-folder",
+    ),
 ]

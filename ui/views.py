@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 from django.db import IntegrityError, transaction
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -37,9 +37,11 @@ from core.modules.manager import (
 from core.modules.models import Module
 from modules.documentation.models import Folder
 from modules.documentation.services import (
+    DocumentUploadError,
     folder_breadcrumb,
     has_folder_permission,
     list_visible_folder_contents,
+    upload_document,
 )
 from ui.navigation import module_is_activated
 from ui.templatetags import ui_tags
@@ -1302,25 +1304,19 @@ def role_matrix_toggle(request):
 # seul signal disponible dans le modèle réel pour cette notion.
 
 
-@require_GET
-def document_explorer(request, folder_id=None):
-    """Explorateur — navigation dossiers + liste + filtres : trois
-    zones d'un seul écran (maquette Lot 3 §1), pas trois écrans
-    distincts. Filtres (type/dossier/date/mot-clé, TECH-022) non câblés
-    ici — recherche complète = UI-305, non anticipée.
+def _explorer_access(request, folder_id):
+    """Vérifie l'activation du module + la permission d'entrée +, si un
+    dossier précis est ciblé, la permission de lecture sur ce dossier.
 
-    @require_GET : écran strictement en lecture, aucune mutation
-    possible ici (le dépôt/la création de dossier restent des
-    opérations backend TECH-021 sans point d'entrée HTTP dans ce
-    ticket — UI-302/UI-304)."""
-    if request.corrux_user is None:
-        login_url = reverse("ui-login")
-        return HttpResponseRedirect(f"{login_url}?next={request.path}")
-
+    Retourne `(folder, error_response)` — `error_response` est `None`
+    si tout est autorisé (et `folder` porte alors la cible réelle),
+    sinon la réponse à retourner telle quelle. Partagé par
+    `document_explorer` (UI-301) et `document_upload` (UI-302) : même
+    écran, le second ajoute simplement un Drawer par-dessus."""
     if not module_is_activated("documentation") or not has_permission(
         request.corrux_user, "documentation.document.read"
     ):
-        return render(
+        return None, render(
             request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
         )
 
@@ -1328,14 +1324,20 @@ def document_explorer(request, folder_id=None):
     if folder_id is not None:
         folder = get_object_or_404(Folder, pk=folder_id)
         if not has_folder_permission(request.corrux_user, folder, "read"):
-            return render(
+            return None, render(
                 request,
                 "ui/documentation/explorer.html",
                 {"permission_denied": True},
                 status=403,
             )
+    return folder, None
 
-    documents, subfolders = list_visible_folder_contents(folder, request.corrux_user)
+
+def _explorer_context(folder, user):
+    """Construit breadcrumb/table pour l'Explorateur — partagé par
+    `document_explorer` et `document_upload` (même liste affichée
+    derrière le Drawer de dépôt)."""
+    documents, subfolders = list_visible_folder_contents(folder, user)
 
     breadcrumb_items = [("Documents", reverse("ui-document-explorer"))]
     for ancestor in folder_breadcrumb(folder):
@@ -1381,10 +1383,144 @@ def document_explorer(request, folder_id=None):
             )
         )
 
-    context = {
+    upload_url = (
+        reverse("ui-document-upload-folder", args=[folder.id])
+        if folder is not None
+        else reverse("ui-document-upload")
+    )
+
+    return {
         "breadcrumb_items": breadcrumb_items,
         "table_headers": ["Nom", "Type", "Taille", "Créé le"],
         "table_rows": table_rows,
         "is_empty": not documents and not subfolders,
+        "upload_url": upload_url,
     }
+
+
+@require_GET
+def document_explorer(request, folder_id=None):
+    """Explorateur — navigation dossiers + liste + filtres : trois
+    zones d'un seul écran (maquette Lot 3 §1), pas trois écrans
+    distincts. Filtres (type/dossier/date/mot-clé, TECH-022) non câblés
+    ici — recherche complète = UI-305, non anticipée.
+
+    @require_GET : écran strictement en lecture, aucune mutation
+    possible ici (le dépôt est une route dédiée, UI-302)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    folder, error_response = _explorer_access(request, folder_id)
+    if error_response is not None:
+        return error_response
+
+    context = _explorer_context(folder, request.corrux_user)
+    return render(request, "ui/documentation/explorer.html", context)
+
+
+# ============================================================================
+# UI-302 — Dépôt de document (Dropzone de référence)
+# ============================================================================
+#
+# « Composant unique à 5 états » (maquette Lot 3 §2), réinterprétés pour
+# un rendu strictement serveur, zéro JavaScript (cohérent avec tout le
+# projet) :
+#   1. Dropzone vide/survol -> rendu GET initial (formulaire statique).
+#   2. Fichier sélectionné + métadonnées à compléter -> comportement
+#      natif du navigateur sur l'input file/les champs texte, avant
+#      toute requête ; aucun état serveur distinct n'existe pour cette
+#      transition (documenté, pas ignoré).
+#   3. Upload en cours (barre de progression + annulation) -> aucun
+#      équivalent serveur sans JS/AJAX ; le navigateur affiche son
+#      propre indicateur de chargement natif pendant le POST. Aucune
+#      fausse barre de progression n'est simulée.
+#   4. Upload réussi -> redirection vers l'Explorateur du dossier cible,
+#      où le document déposé apparaît immédiatement (§8 vision-produit :
+#      « un document déposé est retrouvable ») — réalise « confirmation
+#      + lien vers le document » sans écran de confirmation dédié.
+#   5. Upload échoué -> même écran (Explorateur + Drawer rouvert),
+#      message d'erreur explicite (DocumentUploadError, TECH-021).
+#
+# Permission (décision documentée, cf. UI-301) : entrée sur l'écran =
+# documentation.document.read (comme document_explorer). Dépôt DANS un
+# dossier précis = has_folder_permission(..., "write") en plus — "write"
+# est une action déjà réellement utilisée par TECH-023, contrairement à
+# "documentation.document.creer" (maquette, jamais implémenté nulle
+# part). Dépôt à la racine : aucune vérification supplémentaire (aucun
+# objet Folder n'existe pour porter une permission à la racine).
+
+
+def _upload_drawer_html(folder, upload_url, error_message=""):
+    fields_html = render_to_string(
+        "ui/documentation/upload_fields.html",
+        {
+            "folder_label": folder.name if folder else "Documents (racine)",
+            "error_message": error_message,
+        },
+    )
+    return _component_html(
+        "ui/components/drawer.html",
+        ui_tags.corrux_drawer,
+        drawer_id="document-upload-drawer",
+        title="Déposer un document",
+        content=fields_html,
+        action=upload_url,
+        method="post",
+        submit_label="Déposer",
+        enctype="multipart/form-data",
+        open=True,
+    )
+
+
+def document_upload(request, folder_id=None):
+    """Dépôt d'un document — Drawer ouvert par-dessus l'Explorateur
+    (maquette Lot 3 §2), même patron que UI-201 (Drawer réaffiché
+    ouvert après une erreur de validation, sans JavaScript)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    folder, error_response = _explorer_access(request, folder_id)
+    if error_response is not None:
+        return error_response
+
+    if folder is not None and not has_folder_permission(
+        request.corrux_user, folder, "write"
+    ):
+        return render(
+            request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
+        )
+
+    context = _explorer_context(folder, request.corrux_user)
+    upload_url = context["upload_url"]
+
+    error_message = ""
+    if request.method == "POST":
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            error_message = "Veuillez sélectionner un fichier."
+        else:
+            try:
+                upload_document(
+                    content=uploaded_file.read(),
+                    filename=uploaded_file.name,
+                    owner_user=request.corrux_user,
+                    folder=folder,
+                    category=request.POST.get("category", "").strip(),
+                    description=request.POST.get("description", "").strip(),
+                )
+            except DocumentUploadError as exc:
+                error_message = str(exc)
+            else:
+                redirect_url = (
+                    reverse("ui-document-explorer-folder", args=[folder.id])
+                    if folder is not None
+                    else reverse("ui-document-explorer")
+                )
+                return HttpResponseRedirect(redirect_url)
+    elif request.method not in ("GET", "HEAD"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
+    context["upload_drawer_html"] = _upload_drawer_html(folder, upload_url, error_message)
     return render(request, "ui/documentation/explorer.html", context)

@@ -9,12 +9,17 @@
   {% else %}
     {% corrux_breadcrumb items=breadcrumb_items %}
 
-    <h1 class="corrux-h1">Documents</h1>
+    <div class="corrux-toolbar">
+      <h1 class="corrux-h1">Documents</h1>
+      {% corrux_button label="Déposer un document" variant="primary" href=upload_url %}
+    </div>
 
     {% if is_empty %}
       {% corrux_empty_state message="Ce dossier est vide." %}
     {% else %}
       {% corrux_table headers=table_headers rows=table_rows %}
     {% endif %}
+
+    {{ upload_drawer_html|safe }}
   {% endif %}
 {% endblock %}

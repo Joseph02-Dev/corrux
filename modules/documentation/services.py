@@ -93,6 +93,7 @@ def upload_document(
     owner_user: User,
     folder: Folder | None = None,
     category: str = "",
+    description: str = "",
 ) -> Document:
     """Dépose un document.
 
@@ -103,11 +104,19 @@ def upload_document(
        filename, content)` (TECH-004, seule primitive de stockage,
        jamais contournée).
     3. Crée le `Document` (`storage_path` = `file_id` retourné par
-       `write()`, jamais un chemin physique) et, si `category` est
-       fournie, la `DocumentMetadata` associée (`key="categorie"`) —
-       ces deux écritures dans une même transaction DB.
+       `write()`, jamais un chemin physique) et, si `category`/
+       `description` sont fournies, la `DocumentMetadata` associée
+       (`key="categorie"`/`key="description"`) — ces écritures dans une
+       même transaction DB.
 
     `folder=None` : document déposé à la racine.
+
+    `description` (UI-302) : extension mineure suivant exactement le
+    même patron que `category` (une DocumentMetadata de plus, pas un
+    nouveau mécanisme) — le champ "Description" est explicitement listé
+    par la maquette Lot 3 §2 du formulaire de dépôt, absent du modèle
+    `Document` lui-même (TECH-020), donc porté par la même table
+    extensible que `category`.
     """
     extension = _validate_extension(filename)
     _validate_size(content)
@@ -126,6 +135,10 @@ def upload_document(
         if category:
             DocumentMetadata.objects.create(
                 document=document, key="categorie", value=category
+            )
+        if description:
+            DocumentMetadata.objects.create(
+                document=document, key="description", value=description
             )
 
     return document

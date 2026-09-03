@@ -373,7 +373,7 @@ def corrux_table(headers, rows):
 @register.inclusion_tag("ui/components/drawer.html")
 def corrux_drawer(
     drawer_id, title, content, action="", method="post",
-    submit_label="Enregistrer", cancel_label="Annuler", open=False,  # noqa: A002
+    submit_label="Enregistrer", cancel_label="Annuler", open=False, enctype="",  # noqa: A002
 ):
     """Panneau latéral générique — structure/layout uniquement (UI-201).
 
@@ -389,6 +389,11 @@ def corrux_drawer(
     HTML `open`), sans JavaScript — utilisé pour réafficher un formulaire
     en erreur après une soumission invalide, ou pour un accès GET direct
     à l'URL d'édition.
+
+    `enctype` (UI-302) : optionnel, vide par défaut (comportement
+    inchangé pour tous les appelants existants) — `"multipart/form-data"`
+    pour un formulaire contenant un champ fichier (seul cas où le
+    navigateur transmet réellement le contenu binaire).
     """
     return {
         "drawer_id": drawer_id,
@@ -399,6 +404,7 @@ def corrux_drawer(
         "submit_label": submit_label,
         "cancel_label": cancel_label,
         "open": open,
+        "enctype": enctype,
     }
 
 

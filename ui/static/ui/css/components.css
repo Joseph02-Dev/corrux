@@ -542,6 +542,56 @@ a.corrux-button {
   color: var(--corrux-color-text-muted);
 }
 
+/* --- Dropzone de dépôt de document (UI-302) --------------------------- */
+/* Zéro JavaScript : le <label for> lié à l'<input type="file"> rend toute
+   la zone cliquable, et le glisser-déposer natif du navigateur fonctionne
+   nativement sur un <input type="file"> sans script. */
+
+.corrux-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--corrux-space-2);
+  padding: var(--corrux-space-6);
+  border: 2px dashed var(--corrux-color-border);
+  border-radius: var(--corrux-radius-md);
+  background-color: var(--corrux-color-surface-1);
+  cursor: pointer;
+  text-align: center;
+}
+
+.corrux-dropzone:hover,
+.corrux-dropzone:focus-within {
+  border-color: var(--corrux-color-primary);
+  background-color: var(--corrux-color-surface-0);
+}
+
+.corrux-dropzone__input {
+  /* Visuellement masqué mais accessible (jamais display:none, qui
+     retirerait le focus clavier) — patron standard d'input de fichier
+     stylé via son <label>. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.corrux-dropzone__hint {
+  font-size: var(--corrux-font-size-body);
+  color: var(--corrux-color-text-secondary);
+}
+
+.corrux-dropzone__types {
+  font-size: var(--corrux-font-size-small);
+  color: var(--corrux-color-text-muted);
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 
