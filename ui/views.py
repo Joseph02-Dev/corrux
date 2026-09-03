@@ -35,12 +35,15 @@ from core.modules.manager import (
     deactivate_module,
 )
 from core.modules.models import Module
-from modules.documentation.models import Folder
+from modules.documentation.models import Document, Folder
 from modules.documentation.services import (
     DocumentUploadError,
+    document_metadata_value,
     folder_breadcrumb,
+    has_document_permission,
     has_folder_permission,
     list_visible_folder_contents,
+    update_document,
     upload_document,
 )
 from ui.navigation import module_is_activated
@@ -1364,7 +1367,13 @@ def _explorer_context(folder, user):
             )
         )
     for document in documents:
-        name_cell = document.filename
+        name_cell = _component_html(
+            "ui/components/button.html",
+            ui_tags.corrux_button,
+            label=document.filename,
+            variant="tertiary",
+            href=reverse("ui-document-detail", args=[document.id]),
+        )
         if document.permissions.exists():
             name_cell += " " + _component_html(
                 "ui/components/badge.html",
@@ -1523,4 +1532,151 @@ def document_upload(request, folder_id=None):
         return HttpResponseNotAllowed(["GET", "POST"])
 
     context["upload_drawer_html"] = _upload_drawer_html(folder, upload_url, error_message)
+    return render(request, "ui/documentation/explorer.html", context)
+
+
+# ============================================================================
+# UI-303 — Détail document (Drawer consultation/édition)
+# ============================================================================
+#
+# Un seul composant Drawer, deux variantes (maquette Lot 3 §3) — même
+# patron que UI-201/UI-302 : le Drawer s'ouvre par-dessus l'Explorateur
+# du dossier contenant le document, jamais un second écran.
+#
+# Permission (décision documentée, cohérente avec UI-301/302) :
+# Variante A (consultation) = has_document_permission(..., "read") ;
+# Variante B (édition) = has_document_permission(..., "write") — "write"
+# déjà réellement utilisée par TECH-023, pas
+# "documentation.document.modifier" (maquette, jamais implémenté nulle
+# part, même écart déjà signalé en UI-301/302).
+#
+# Portée volontairement réduite par rapport à la maquette, écarts
+# documentés explicitement (pas silencieux) :
+# - "Nom" (filename) : jamais éditable — cf. update_document(),
+#   services.py (le chemin de stockage physique dépend du filename
+#   exact, aucune primitive de renommage n'existe).
+# - "Dossier" (déplacement) : non exposé dans le formulaire d'édition —
+#   aucun composant de sélection de dossier n'est établi nulle part
+#   dans le projet ; update_document() supporte le paramètre côté
+#   service pour un futur ticket, la vue UI-303 ne l'expose pas (le
+#   document reste dans son dossier actuel lors d'une édition).
+# - "Télécharger"/"Déplacer"/"Supprimer" : hors du texte du ticket lui-
+#   même. "Supprimer" n'a d'ailleurs aucune primitive de stockage
+#   correspondante (core.storage.files n'a pas de delete(), dette déjà
+#   signalée depuis TECH-004/021). "Gérer les permissions" = UI-304,
+#   non anticipé.
+
+
+def _document_detail_drawer_html(document, edit_url, can_edit):
+    fields_html = render_to_string(
+        "ui/documentation/detail_fields.html",
+        {
+            "filename": document.filename,
+            "mime_type": document.mime_type,
+            "owner_label": document.owner_user.full_name,
+            "created_at_label": _format_datetime(document.created_at),
+            "category": document_metadata_value(document, "categorie"),
+            "description": document_metadata_value(document, "description"),
+        },
+    )
+    if can_edit:
+        fields_html += _component_html(
+            "ui/components/button.html",
+            ui_tags.corrux_button,
+            label="Modifier",
+            variant="primary",
+            href=edit_url,
+        )
+    return _component_html(
+        "ui/components/drawer.html",
+        ui_tags.corrux_drawer,
+        drawer_id="document-detail-drawer",
+        title=document.filename,
+        content=fields_html,
+        action="",
+        method="get",
+        submit_label="Fermer",
+        cancel_label="Fermer",
+        open=True,
+    )
+
+
+def document_detail(request, document_id):
+    """Variante A — consultation, lecture seule."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    document = get_object_or_404(Document, pk=document_id)
+    if not has_document_permission(request.corrux_user, document, "read"):
+        return render(
+            request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
+        )
+
+    can_edit = has_document_permission(request.corrux_user, document, "write")
+    edit_url = reverse("ui-document-edit", args=[document.id])
+
+    context = _explorer_context(document.folder, request.corrux_user)
+    context["detail_drawer_html"] = _document_detail_drawer_html(document, edit_url, can_edit)
+    return render(request, "ui/documentation/explorer.html", context)
+
+
+def _document_edit_drawer_html(document, edit_url, category, description, error_message=""):
+    fields_html = render_to_string(
+        "ui/documentation/edit_fields.html",
+        {
+            "filename": document.filename,
+            "category": category,
+            "description": description,
+            "error_message": error_message,
+        },
+    )
+    return _component_html(
+        "ui/components/drawer.html",
+        ui_tags.corrux_drawer,
+        drawer_id="document-edit-drawer",
+        title=f"Modifier {document.filename}",
+        content=fields_html,
+        action=edit_url,
+        method="post",
+        submit_label="Enregistrer",
+        cancel_label="Annuler",
+        open=True,
+    )
+
+
+def document_edit(request, document_id):
+    """Variante B — édition des métadonnées (catégorie/description).
+
+    Critère d'acceptation explicite du ticket : inaccessible sans
+    permission d'écriture — vérifié côté serveur, jamais seulement par
+    l'absence du bouton "Modifier" côté Variante A."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    document = get_object_or_404(Document, pk=document_id)
+    if not has_document_permission(request.corrux_user, document, "write"):
+        return render(
+            request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
+        )
+
+    edit_url = reverse("ui-document-edit", args=[document.id])
+    category = document_metadata_value(document, "categorie")
+    description = document_metadata_value(document, "description")
+
+    if request.method == "POST":
+        category = request.POST.get("category", "").strip()
+        description = request.POST.get("description", "").strip()
+        update_document(
+            document=document, folder=document.folder, category=category, description=description
+        )
+        return HttpResponseRedirect(reverse("ui-document-detail", args=[document.id]))
+    elif request.method not in ("GET", "HEAD"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
+    context = _explorer_context(document.folder, request.corrux_user)
+    context["detail_drawer_html"] = _document_edit_drawer_html(
+        document, edit_url, category, description
+    )
     return render(request, "ui/documentation/explorer.html", context)

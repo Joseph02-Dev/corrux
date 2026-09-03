@@ -1,0 +1,13 @@
+{% load ui_tags %}
+{% comment %}
+Champs du Drawer d'édition — Variante B (UI-303). "Nom" affiché en
+lecture seule uniquement (non éditable : le chemin de stockage physique
+dépend du filename exact, aucune primitive de renommage n'existe côté
+stockage — cf. commentaire de update_document(), services.py).
+{% endcomment %}
+{% if error_message %}
+  {% corrux_error_state message=error_message %}
+{% endif %}
+<p class="corrux-text-small">Nom : {{ filename }} (non modifiable)</p>
+{% corrux_field label="Catégorie" name="category" field_id="id_edit_category" value=category %}
+{% corrux_field label="Description" name="description" field_id="id_edit_description" value=description %}

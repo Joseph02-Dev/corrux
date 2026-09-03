@@ -1,0 +1,25 @@
+{% load ui_tags %}
+{% comment %}
+Champs du Drawer de détail — Variante A, consultation (UI-303).
+Réutilise .corrux-definition-list, déjà établi par la page Mon profil
+(UI-105) — aucun nouveau composant de lecture seule créé.
+{% endcomment %}
+<dl class="corrux-definition-list">
+  <dt>Nom</dt>
+  <dd>{{ filename }}</dd>
+
+  <dt>Type</dt>
+  <dd>{{ mime_type }}</dd>
+
+  <dt>Déposé par</dt>
+  <dd>{{ owner_label }}</dd>
+
+  <dt>Date</dt>
+  <dd>{{ created_at_label }}</dd>
+
+  <dt>Catégorie</dt>
+  <dd>{{ category|default:"—" }}</dd>
+
+  <dt>Description</dt>
+  <dd>{{ description|default:"—" }}</dd>
+</dl>

@@ -49,4 +49,10 @@ urlpatterns = [
         views.document_upload,
         name="ui-document-upload-folder",
     ),
+    path("documents/<int:document_id>/", views.document_detail, name="ui-document-detail"),
+    path(
+        "documents/<int:document_id>/modifier/",
+        views.document_edit,
+        name="ui-document-edit",
+    ),
 ]

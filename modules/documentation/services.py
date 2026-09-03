@@ -149,6 +149,57 @@ def create_folder(*, name: str, parent: Folder | None = None) -> Folder:
     return Folder.objects.create(name=name, parent_folder=parent)
 
 
+def _upsert_document_metadata(document: Document, key: str, value: str) -> None:
+    if value:
+        DocumentMetadata.objects.update_or_create(
+            document=document, key=key, defaults={"value": value}
+        )
+    else:
+        DocumentMetadata.objects.filter(document=document, key=key).delete()
+
+
+def document_metadata_value(document: Document, key: str) -> str:
+    """Valeur d'une métadonnée (`categorie`/`description`) ou chaîne
+    vide si absente — UI-303."""
+    entry = document.metadata_entries.filter(key=key).first()
+    return entry.value if entry else ""
+
+
+def update_document(
+    *,
+    document: Document,
+    folder: Folder | None,
+    category: str = "",
+    description: str = "",
+) -> Document:
+    """Modifie les métadonnées d'un document — dossier, catégorie,
+    description — UI-303.
+
+    Ne modifie JAMAIS `filename`/`storage_path`/`mime_type`/
+    `size_bytes`/`owner_user` : le nom de fichier est indissociable du
+    chemin physique réel — `core.storage.files.write()` construit le
+    chemin de stockage à partir du `filename` exact (TECH-004,
+    `<root>/<module>/<uuid>/<filename>`). Le renommer en base sans
+    renommer le fichier casserait sa lecture ultérieure
+    (`storage.read()` recevrait un `filename` ne correspondant plus au
+    fichier réel sur disque), et `core.storage.files` ne fournit aucune
+    primitive de renommage. Limite documentée, pas contournée : le nom
+    reste volontairement non éditable dans ce ticket (contrairement à
+    la maquette, qui le liste comme champ éditable — écart signalé,
+    pas silencieux).
+
+    `folder` : déplacement pur en base — le chemin de stockage physique
+    n'est jamais indexé par `Folder`, aucun impact sur le fichier.
+    """
+    with transaction.atomic():
+        document.folder = folder
+        document.save(update_fields=["folder"])
+        _upsert_document_metadata(document, "categorie", category)
+        _upsert_document_metadata(document, "description", description)
+
+    return document
+
+
 def list_folder_contents(folder: Folder | None) -> tuple[list[Document], list[Folder]]:
     """Documents et sous-dossiers directement contenus dans `folder`
     (`None` = racine). Navigation minimale requise par TECH-021 — pas
