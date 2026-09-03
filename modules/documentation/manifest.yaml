@@ -1,0 +1,11 @@
+id: documentation
+name: "Documentation / Archivage"
+version: "1.0.0"
+depends_on: []
+permissions:
+  - resource: document
+    actions: [read]
+provides_api: [documents.v1]
+consumes_api: []
+db_schema: documentation
+migrations_path: migrations/
