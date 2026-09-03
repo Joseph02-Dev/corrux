@@ -37,6 +37,7 @@ from core.modules.manager import (
 from core.modules.models import Module
 from modules.documentation.models import Document, DocumentPermission, Folder
 from modules.documentation.services import (
+    MIME_TYPE_BY_EXTENSION,
     DocumentUploadError,
     document_metadata_value,
     folder_breadcrumb,
@@ -46,6 +47,7 @@ from modules.documentation.services import (
     list_permissions_for,
     list_visible_folder_contents,
     revoke_permission,
+    search_documents,
     update_document,
     upload_document,
 )
@@ -2006,3 +2008,132 @@ def folder_permissions_add(request, folder_id):
 
     _add_permission_shared(request, folder=folder)
     return HttpResponseRedirect(reverse("ui-folder-permissions", args=[folder.id]))
+
+
+# ============================================================================
+# UI-305 — Recherche documentaire + câblage de la recherche globale
+# ============================================================================
+#
+# Même moteur de recherche (search_documents(), TECH-022) quelle que
+# soit l'entrée — Topbar (câblée dans ui_tags.py::corrux_topbar +
+# ui/templates/ui/shell/topbar.html) ou cet écran dédié — critère
+# d'acceptation explicite du ticket : un seul appel à search_documents()
+# ici, la Topbar redirige simplement vers cette même route en GET.
+#
+# Permission d'entrée (décision documentée, cohérente avec UI-301+) :
+# documentation.document.read (même code que l'Explorateur et la
+# Topbar) — pas "documentation.document.lire" (maquette, jamais
+# implémenté nulle part).
+#
+# Filtre "Dossier" : liste plate alphabétique de tous les dossiers —
+# aucun composant d'arborescence n'est établi nulle part dans le projet
+# (même limite déjà documentée en UI-303 pour l'édition). "Modifié"
+# (maquette) correspond à Document.created_at — seul champ date du
+# modèle (TECH-020), aucune notion de date de modification distincte
+# n'existe.
+
+
+def _search_type_options():
+    options = [("", "Tous")]
+    for extension, mime_type in MIME_TYPE_BY_EXTENSION.items():
+        options.append((mime_type, extension.lstrip(".").upper()))
+    return options
+
+
+def _search_folder_options():
+    options = [("", "Tous"), ("_root_", "Racine uniquement")]
+    for target_folder in Folder.objects.order_by("name"):
+        options.append((str(target_folder.id), target_folder.name))
+    return options
+
+
+def _parse_search_date(value):
+    """Une date GET absente ou invalide est ignorée silencieusement
+    (filtre non appliqué) — jamais une erreur 500 (même patron que
+    UI-206, audit_list)."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _document_location_label(document):
+    ancestors = folder_breadcrumb(document.folder)
+    return " › ".join(f.name for f in ancestors) if ancestors else "Racine"
+
+
+@require_GET
+def document_search(request):
+    """Écran de recherche complet — mêmes filtres que le moteur
+    TECH-022 (mot-clé/type/dossier/date), résultats toujours filtrés
+    par permission (search_documents() le garantit déjà, rien
+    n'est dupliqué ici)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    if not module_is_activated("documentation") or not has_permission(
+        request.corrux_user, "documentation.document.read"
+    ):
+        return render(
+            request, "ui/documentation/search.html", {"permission_denied": True}, status=403
+        )
+
+    keyword = request.GET.get("q", "").strip()
+    mime_type = request.GET.get("type", "").strip()
+    folder_param = request.GET.get("dossier", "").strip()
+    from_raw = request.GET.get("du", "").strip()
+    to_raw = request.GET.get("au", "").strip()
+
+    search_kwargs = {
+        "user": request.corrux_user,
+        "keyword": keyword,
+        "mime_type": mime_type,
+        "created_after": _parse_search_date(from_raw),
+        "created_before": _parse_search_date(to_raw),
+    }
+    if folder_param == "_root_":
+        search_kwargs["folder"] = None
+    elif folder_param:
+        target_folder = Folder.objects.filter(pk=folder_param).first()
+        if target_folder is not None:
+            search_kwargs["folder"] = target_folder
+        else:
+            folder_param = ""  # identifiant invalide, filtre ignoré
+
+    results = search_documents(**search_kwargs)
+
+    table_rows = [
+        ui_tags.TableRow(
+            cells=(
+                _component_html(
+                    "ui/components/button.html",
+                    ui_tags.corrux_button,
+                    label=document.filename,
+                    variant="tertiary",
+                    href=reverse("ui-document-detail", args=[document.id]),
+                ),
+                _document_location_label(document),
+                _format_file_size(document.size_bytes),
+                _format_datetime(document.created_at),
+            ),
+        )
+        for document in results
+    ]
+
+    context = {
+        "table_headers": ["Nom", "Emplacement", "Taille", "Créé le"],
+        "table_rows": table_rows,
+        "results_empty": not results,
+        "searched": bool(request.GET),
+        "keyword": keyword,
+        "selected_type": mime_type,
+        "selected_folder": folder_param,
+        "from_value": from_raw if search_kwargs["created_after"] is not None else "",
+        "to_value": to_raw if search_kwargs["created_before"] is not None else "",
+        "type_options": _search_type_options(),
+        "folder_options": _search_folder_options(),
+    }
+    return render(request, "ui/documentation/search.html", context)

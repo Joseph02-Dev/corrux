@@ -1,0 +1,29 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Recherche documentaire — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    <h1 class="corrux-h1">Recherche documentaire</h1>
+
+    <form method="get" action="/documents/recherche/" class="corrux-audit-filters">
+      {% corrux_field label="Mot-clé" name="q" field_id="id_search_q" value=keyword %}
+      {% corrux_field label="Type de fichier" name="type" field_id="id_search_type" input_type="select" options=type_options value=selected_type %}
+      {% corrux_field label="Dossier" name="dossier" field_id="id_search_dossier" input_type="select" options=folder_options value=selected_folder %}
+      {% corrux_field label="Créé après le" name="du" field_id="id_search_du" input_type="date" value=from_value %}
+      {% corrux_field label="Créé avant le" name="au" field_id="id_search_au" input_type="date" value=to_value %}
+      {% corrux_button label="Rechercher" variant="primary" type="submit" %}
+    </form>
+
+    {% if not searched %}
+      {% corrux_empty_state message="Saisissez un mot-clé ou un filtre pour lancer une recherche." %}
+    {% elif results_empty %}
+      {% corrux_empty_state message="Aucun résultat." %}
+    {% else %}
+      {% corrux_table headers=table_headers rows=table_rows %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

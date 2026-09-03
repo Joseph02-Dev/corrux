@@ -76,7 +76,7 @@ def get_navigation(user: User | None) -> tuple[NavGroup, ...]:
         user, "documentation.document.read"
     ):
         documentation_items.append(NavItem("Documents", "/documents/", "folder"))
-        documentation_items.append(NavItem("Recherche", "#", "search"))
+        documentation_items.append(NavItem("Recherche", "/documents/recherche/", "search"))
     if documentation_items:
         groups.append(NavGroup("Documentation", tuple(documentation_items)))
 

@@ -18,7 +18,8 @@ from dataclasses import dataclass
 
 from django import template
 
-from ui.navigation import get_navigation
+from core.authz.engine import has_permission
+from ui.navigation import get_navigation, module_is_activated
 
 register = template.Library()
 
@@ -246,8 +247,8 @@ def corrux_permission_denied(message=DEFAULT_PERMISSION_DENIED_MESSAGE):
 
 @register.inclusion_tag("ui/shell/topbar.html", takes_context=True)
 def corrux_topbar(context):
-    """Barre supérieure — marque, recherche (non fonctionnelle),
-    notifications (non fonctionnelles), menu utilisateur.
+    """Barre supérieure — marque, recherche, notifications (non
+    fonctionnelles), menu utilisateur.
 
     Propage explicitement `request` dans le contexte rendu : une
     inclusion tag imbriquée (corrux_user_menu, appelée depuis
@@ -256,8 +257,20 @@ def corrux_topbar(context):
     (vérifié : sans cette ligne, le menu utilisateur disparaît
     silencieusement, request.get("request") valant None dans le tag
     imbriqué).
-    """
-    return {"request": context.get("request")}
+
+    `search_available` (UI-305) : la recherche n'est un formulaire
+    fonctionnel que si le module Documentation est activé ET
+    l'utilisateur possède documentation.document.read — même garde que
+    la Sidebar (ui/navigation.py), jamais une fonctionnalité présentée
+    comme disponible sans l'être réellement."""
+    request = context.get("request")
+    user = getattr(request, "corrux_user", None) if request else None
+    search_available = bool(
+        user is not None
+        and module_is_activated("documentation")
+        and has_permission(user, "documentation.document.read")
+    )
+    return {"request": request, "search_available": search_available}
 
 
 @register.inclusion_tag("ui/shell/sidebar.html", takes_context=True)

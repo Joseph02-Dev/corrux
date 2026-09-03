@@ -67,6 +67,17 @@
   color: var(--corrux-color-text-muted);
 }
 
+.corrux-topbar__search-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
 .corrux-topbar__actions {
   display: flex;
   align-items: center;

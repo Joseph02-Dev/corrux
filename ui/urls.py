@@ -95,4 +95,5 @@ urlpatterns = [
         views.folder_permissions_add,
         name="ui-folder-permissions-add",
     ),
+    path("documents/recherche/", views.document_search, name="ui-document-search"),
 ]

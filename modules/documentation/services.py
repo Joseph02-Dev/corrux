@@ -47,7 +47,7 @@ MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MiB, cf. contrat TECH-021
 # réel (contrat §4). L'ensemble fermé de 4 extensions autorisées rend
 # une correspondance déterministe suffisante, sans dépendance de
 # détection par contenu.
-_MIME_TYPE_BY_EXTENSION = {
+MIME_TYPE_BY_EXTENSION = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -128,7 +128,7 @@ def upload_document(
             owner_user=owner_user,
             folder=folder,
             filename=stored_file.filename,
-            mime_type=_MIME_TYPE_BY_EXTENSION[extension],
+            mime_type=MIME_TYPE_BY_EXTENSION[extension],
             size_bytes=len(content),
             storage_path=stored_file.file_id,
         )

@@ -13,17 +13,32 @@ anonyme/authentifié.
 <header class="corrux-topbar">
   <div class="corrux-topbar__brand">CORRUX</div>
 
-  <div class="corrux-topbar__search" role="search">
-    {% corrux_icon name="search" %}
-    <input
-      type="search"
-      class="corrux-topbar__search-input"
-      placeholder="Recherche (à venir)"
-      disabled
-      aria-disabled="true"
-      aria-label="Recherche globale (non disponible pour le moment)"
-    >
-  </div>
+  {% if search_available %}
+    <form method="get" action="/documents/recherche/" class="corrux-topbar__search" role="search">
+      <button type="submit" class="corrux-topbar__search-submit" aria-label="Rechercher">
+        {% corrux_icon name="search" %}
+      </button>
+      <input
+        type="search"
+        name="q"
+        class="corrux-topbar__search-input"
+        placeholder="Rechercher un document"
+        aria-label="Recherche de documents"
+      >
+    </form>
+  {% else %}
+    <div class="corrux-topbar__search" role="search">
+      {% corrux_icon name="search" %}
+      <input
+        type="search"
+        class="corrux-topbar__search-input"
+        placeholder="Recherche (à venir)"
+        disabled
+        aria-disabled="true"
+        aria-label="Recherche globale (non disponible pour le moment)"
+      >
+    </div>
+  {% endif %}
 
   <div class="corrux-topbar__actions">
     <details class="corrux-notifications">
