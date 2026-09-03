@@ -175,7 +175,18 @@ def list_folder_contents(folder: Folder | None) -> tuple[list[Document], list[Fo
 def _document_read_permission_filter(user: User) -> Q:
     """Filtre ORM (bulk) exprimant la même règle que
     `has_document_permission(user, doc, "read")`, nécessaire pour
-    `search_documents()` (éviter un N+1)."""
+    `search_documents()` (éviter un N+1).
+
+    Garde de statut explicite (bug corrigé : cette fonction affirmait
+    exprimer « exactement la même règle » que `has_document_permission`
+    sans réellement appliquer sa garde `user.status == ACTIVE` — un
+    utilisateur inactif obtenait donc, en pratique, aucun résultat via
+    le raccourci propriétaire de la version unitaire mais PAS via cette
+    version en masse, un vrai risque en cas d'appel hors du flux HTTP
+    normal, où le middleware ne filtre pas déjà les utilisateurs
+    inactifs)."""
+    if user is None or user.status != User.Status.ACTIVE:
+        return Q(pk__in=[])  # aucun document ne correspond jamais
     role_ids = user.user_roles.values_list("role_id", flat=True)
     return (
         Q(owner_user=user)
@@ -189,7 +200,14 @@ def has_document_permission(user: User, document: Document, action: str) -> bool
 
     Propriétaire : accès implicite pour `action="read"` uniquement.
     Sinon, délègue entièrement à la primitive générique core.authz
-    (aucun moteur RBAC concurrent créé ici)."""
+    (aucun moteur RBAC concurrent créé ici).
+
+    Vérifie explicitement le statut actif de `user` avant tout raccourci
+    propriétaire — le raccourci ne passe pas par `has_object_permission()`
+    (qui l'applique déjà), donc cette garde doit être répétée ici pour
+    rester réellement équivalente à la primitive générique."""
+    if user is None or user.status != User.Status.ACTIVE:
+        return False
     if action == "read" and document.owner_user_id == user.id:
         return True
     return has_object_permission(user, document.permissions.all(), action)
@@ -201,7 +219,15 @@ def has_folder_permission(user: User, folder: Folder, action: str) -> bool:
     Aucune règle de propriétaire implicite (Folder n'a pas de champ
     propriétaire). Uniquement DocumentPermission directe sur ce
     dossier — aucune propagation vers son contenu ni depuis un dossier
-    parent."""
+    parent.
+
+    Garde de statut explicite ici aussi (redondante avec
+    `has_object_permission()` à ce jour, mais garde le point d'entrée
+    robuste si cette fonction évolue un jour vers un raccourci qui ne
+    passerait plus systématiquement par la primitive générique — même
+    logique que `has_document_permission`)."""
+    if user is None or user.status != User.Status.ACTIVE:
+        return False
     return has_object_permission(user, folder.permissions.all(), action)
 
 

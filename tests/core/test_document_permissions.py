@@ -265,6 +265,21 @@ class TestSearchIntegration:
 
         assert search_documents(user=other_user, keyword="temporaire") == []
 
+    def test_inactive_user_gets_no_results_even_as_owner(self, storage_root, owner):
+        """Bug corrigé : le filtre en masse (utilisé par search_documents)
+        ne vérifiait pas le statut actif, contrairement au raccourci
+        propriétaire unitaire (has_document_permission) — un utilisateur
+        désactivé après coup (hors flux HTTP normal, où le middleware
+        filtre déjà) aurait pu voir ses propres documents via une
+        recherche en masse."""
+        from core.identity.models import User as UserModel
+
+        upload_document(content=b"x", filename="prive-inactif.pdf", owner_user=owner)
+        owner.status = UserModel.Status.INACTIVE
+        owner.save()
+
+        assert search_documents(user=owner, keyword="prive-inactif") == []
+
 
 # --- Audit (26-28) ---------------------------------------------------------------
 
@@ -349,3 +364,16 @@ class TestGenericPrimitiveIsolated:
         other_user.save()
 
         assert has_document_permission(other_user, document, "read") is False
+
+    def test_inactive_owner_is_denied_via_the_owner_shortcut(self, document, owner):
+        """Bug corrigé : le raccourci propriétaire de
+        has_document_permission() ne passe pas par
+        has_object_permission() (qui vérifie déjà le statut) — la garde
+        devait donc être répétée explicitement au sommet de la fonction.
+        Ce test cible précisément ce chemin, distinct de
+        test_inactive_user_is_denied ci-dessus (qui teste le chemin
+        "permission accordée", déjà protégé avant ce correctif)."""
+        owner.status = User.Status.INACTIVE
+        owner.save()
+
+        assert has_document_permission(owner, document, "read") is False
