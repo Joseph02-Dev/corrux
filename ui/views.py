@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 from django.db import IntegrityError, transaction
-from django.http import HttpResponseNotAllowed, HttpResponseRedirect
+from django.http import HttpResponseForbidden, HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -35,14 +35,17 @@ from core.modules.manager import (
     deactivate_module,
 )
 from core.modules.models import Module
-from modules.documentation.models import Document, Folder
+from modules.documentation.models import Document, DocumentPermission, Folder
 from modules.documentation.services import (
     DocumentUploadError,
     document_metadata_value,
     folder_breadcrumb,
+    grant_permission,
     has_document_permission,
     has_folder_permission,
+    list_permissions_for,
     list_visible_folder_contents,
+    revoke_permission,
     update_document,
     upload_document,
 )
@@ -1221,14 +1224,17 @@ def role_matrix(request):
         for resource, action, row_label in codes:
             cells = tuple(
                 _component_html(
-                    "ui/components/permission_cell.html",
-                    ui_tags.corrux_permission_cell,
-                    role_id=role.id,
-                    module_id=module_id,
-                    resource=resource,
-                    action=action,
+                    "ui/components/toggle_cell.html",
+                    ui_tags.corrux_toggle_cell,
+                    hidden_fields={
+                        "role_id": role.id,
+                        "module_id": module_id,
+                        "resource": resource,
+                        "action": action,
+                    },
                     granted=(role.id, module_id, resource, action) in granted,
                     toggle_url=toggle_url,
+                    label=f"{module_id}.{resource}.{action} — {role.name}",
                 )
                 for role in roles
             )
@@ -1398,12 +1404,17 @@ def _explorer_context(folder, user):
         else reverse("ui-document-upload")
     )
 
+    folder_permissions_url = ""
+    if folder is not None and has_folder_permission(user, folder, "write"):
+        folder_permissions_url = reverse("ui-folder-permissions", args=[folder.id])
+
     return {
         "breadcrumb_items": breadcrumb_items,
         "table_headers": ["Nom", "Type", "Taille", "Créé le"],
         "table_rows": table_rows,
         "is_empty": not documents and not subfolders,
         "upload_url": upload_url,
+        "folder_permissions_url": folder_permissions_url,
     }
 
 
@@ -1587,6 +1598,13 @@ def _document_detail_drawer_html(document, edit_url, can_edit):
             variant="primary",
             href=edit_url,
         )
+        fields_html += _component_html(
+            "ui/components/button.html",
+            ui_tags.corrux_button,
+            label="Gérer les permissions",
+            variant="secondary",
+            href=reverse("ui-document-permissions", args=[document.id]),
+        )
     return _component_html(
         "ui/components/drawer.html",
         ui_tags.corrux_drawer,
@@ -1680,3 +1698,311 @@ def document_edit(request, document_id):
         document, edit_url, category, description
     )
     return render(request, "ui/documentation/explorer.html", context)
+
+
+# ============================================================================
+# UI-304 — Permissions document/dossier (composant générique)
+# ============================================================================
+#
+# Un seul composant (Modal) pour document ET dossier (maquette Lot 3
+# §4), réutilisant intégralement grant_permission()/revoke_permission()
+# (TECH-023) — aucune nouvelle logique de permission, uniquement une
+# façade UI. Bascule via corrux_toggle_cell (généralisé depuis UI-202
+# pour ce ticket même, cf. ui_tags.py) ; retrait via
+# corrux_inline_action_form (action à sens unique, pas une bascule).
+#
+# Permission de gestion (décision documentée, cohérente avec UI-301/
+# 302/303) : has_document_permission/has_folder_permission(...,
+# "write") — pas "documentation.document.gerer_permissions" (maquette,
+# jamais implémenté nulle part).
+#
+# "Liste vide -> au moins un accès (le propriétaire)" (maquette) :
+# uniquement pour un DOCUMENT (Folder n'a pas de propriétaire,
+# TECH-023) — affiché en lecture seule, jamais une DocumentPermission
+# réelle, jamais togglable/supprimable depuis cet écran (cohérent avec
+# la règle déjà tranchée : l'accès du propriétaire reste toujours
+# implicite, quoi qu'il arrive).
+
+
+def _grantee_label(role, user):
+    if user is not None:
+        return f"{user.full_name} — Utilisateur individuel (accès exceptionnel)"
+    return f"{role.name} — Rôle"
+
+
+def _grantee_select_options():
+    options = [("", "— Sélectionner —")]
+    for role in Role.objects.filter(name__in=_PREDEFINED_ROLE_NAMES).order_by("name"):
+        options.append((f"role:{role.id}", f"Rôle : {role.name}"))
+    for grantee_user in User.objects.filter(status=User.Status.ACTIVE).order_by("full_name"):
+        options.append((f"user:{grantee_user.id}", f"Utilisateur : {grantee_user.full_name}"))
+    return options
+
+
+def _build_permission_rows(permissions, toggle_url, remove_url, owner_row_label):
+    grantees = {}
+    order = []
+    for perm in permissions:
+        key = ("role", perm.role_id) if perm.role_id else ("user", perm.user_id)
+        if key not in grantees:
+            grantees[key] = {"role": perm.role, "user": perm.user, "actions": set()}
+            order.append(key)
+        grantees[key]["actions"].add(perm.action)
+
+    rows = []
+    if owner_row_label is not None:
+        rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    owner_row_label,
+                    _component_html(
+                        "ui/components/badge.html",
+                        ui_tags.corrux_badge,
+                        label="Implicite",
+                        tone="info",
+                    ),
+                    "—",
+                    "—",
+                ),
+            )
+        )
+
+    for key in order:
+        grantee = grantees[key]
+        kind, _grantee_id = key
+        role, grantee_user = grantee["role"], grantee["user"]
+        label = _grantee_label(role, grantee_user)
+        hidden_base = {"role_id": role.id} if kind == "role" else {"user_id": grantee_user.id}
+
+        read_cell = _component_html(
+            "ui/components/toggle_cell.html",
+            ui_tags.corrux_toggle_cell,
+            hidden_fields={**hidden_base, "action": "read"},
+            granted="read" in grantee["actions"],
+            toggle_url=toggle_url,
+            label=f"{label} — lecture",
+        )
+        write_cell = _component_html(
+            "ui/components/toggle_cell.html",
+            ui_tags.corrux_toggle_cell,
+            hidden_fields={**hidden_base, "action": "write"},
+            granted="write" in grantee["actions"],
+            toggle_url=toggle_url,
+            label=f"{label} — écriture",
+        )
+        remove_cell = _component_html(
+            "ui/components/inline_action_form.html",
+            ui_tags.corrux_inline_action_form,
+            hidden_fields=hidden_base,
+            action_url=remove_url,
+            label="Retirer",
+            variant="danger",
+        )
+        rows.append(ui_tags.TableRow(cells=(label, read_cell, write_cell, remove_cell)))
+
+    return rows
+
+
+def _permissions_modal_html(*, document=None, folder=None, toggle_url, remove_url, add_url):
+    permissions = list_permissions_for(document=document, folder=folder)
+    owner_row_label = f"{document.owner_user.full_name} — Propriétaire" if document else None
+
+    rows = _build_permission_rows(permissions, toggle_url, remove_url, owner_row_label)
+    content = render_to_string(
+        "ui/documentation/permissions_content.html",
+        {
+            "rows_empty": not rows,
+            "table_headers": ["Bénéficiaire", "Lecture", "Écriture", ""],
+            "table_rows": rows,
+            "add_url": add_url,
+            "grantee_options": _grantee_select_options(),
+        },
+    )
+    return _component_html(
+        "ui/components/content_modal.html",
+        ui_tags.corrux_content_modal,
+        modal_id="permissions-modal",
+        title="Gérer les permissions",
+        content=content,
+        open=True,
+    )
+
+
+def _resolve_grantee(raw_value):
+    """Analyse `"role:<id>"`/`"user:<id>"` -> `(role, user)`, exactement
+    un des deux non-None, ou `(None, None)` si invalide/absent — jamais
+    une confiance aveugle en l'identifiant fourni par le client."""
+    kind, _, raw_id = (raw_value or "").partition(":")
+    if kind == "role":
+        role = Role.objects.filter(pk=raw_id).first()
+        return (role, None) if role is not None else (None, None)
+    if kind == "user":
+        grantee_user = User.objects.filter(pk=raw_id).first()
+        return (None, grantee_user) if grantee_user is not None else (None, None)
+    return None, None
+
+
+def document_permissions(request, document_id):
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    document = get_object_or_404(Document, pk=document_id)
+    if not has_document_permission(request.corrux_user, document, "write"):
+        return render(
+            request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
+        )
+
+    context = _explorer_context(document.folder, request.corrux_user)
+    context["detail_drawer_html"] = _permissions_modal_html(
+        document=document,
+        toggle_url=reverse("ui-document-permissions-toggle", args=[document.id]),
+        remove_url=reverse("ui-document-permissions-remove", args=[document.id]),
+        add_url=reverse("ui-document-permissions-add", args=[document.id]),
+    )
+    return render(request, "ui/documentation/explorer.html", context)
+
+
+def _toggle_permission_shared(request, *, document=None, folder=None):
+    """Bascule read/write pour un bénéficiaire — logique partagée
+    document/dossier (composant unique, maquette Lot 3 §4)."""
+    role, grantee_user = _resolve_grantee(
+        f"role:{request.POST['role_id']}"
+        if request.POST.get("role_id")
+        else (f"user:{request.POST['user_id']}" if request.POST.get("user_id") else "")
+    )
+    action = request.POST.get("action", "")
+    if (role is not None or grantee_user is not None) and action in ("read", "write"):
+        existing = DocumentPermission.objects.filter(
+            document=document, folder=folder, role=role, user=grantee_user, action=action
+        ).first()
+        if existing:
+            revoke_permission(actor=request.corrux_user, permission=existing)
+        else:
+            grant_permission(
+                actor=request.corrux_user,
+                action=action,
+                document=document,
+                folder=folder,
+                role=role,
+                user=grantee_user,
+            )
+
+
+def _remove_permission_shared(request, *, document=None, folder=None):
+    """Retrait de tous les accès (read+write) d'un bénéficiaire —
+    logique partagée document/dossier."""
+    role_id = request.POST.get("role_id")
+    user_id = request.POST.get("user_id")
+    matching = DocumentPermission.objects.filter(document=document, folder=folder)
+    matching = matching.filter(role_id=role_id) if role_id else matching.filter(user_id=user_id)
+    for permission in matching:
+        revoke_permission(actor=request.corrux_user, permission=permission)
+
+
+def _add_permission_shared(request, *, document=None, folder=None):
+    """Attribution d'un accès lecture initial à un nouveau bénéficiaire
+    — logique partagée document/dossier."""
+    role, grantee_user = _resolve_grantee(request.POST.get("grantee", ""))
+    if role is not None or grantee_user is not None:
+        grant_permission(
+            actor=request.corrux_user,
+            action="read",
+            document=document,
+            folder=folder,
+            role=role,
+            user=grantee_user,
+        )
+
+
+@require_POST
+def document_permissions_toggle(request, document_id):
+    if request.corrux_user is None:
+        return HttpResponseForbidden()
+    document = get_object_or_404(Document, pk=document_id)
+    if not has_document_permission(request.corrux_user, document, "write"):
+        return HttpResponseForbidden()
+
+    _toggle_permission_shared(request, document=document)
+    return HttpResponseRedirect(reverse("ui-document-permissions", args=[document.id]))
+
+
+@require_POST
+def document_permissions_remove(request, document_id):
+    if request.corrux_user is None:
+        return HttpResponseForbidden()
+    document = get_object_or_404(Document, pk=document_id)
+    if not has_document_permission(request.corrux_user, document, "write"):
+        return HttpResponseForbidden()
+
+    _remove_permission_shared(request, document=document)
+    return HttpResponseRedirect(reverse("ui-document-permissions", args=[document.id]))
+
+
+@require_POST
+def document_permissions_add(request, document_id):
+    if request.corrux_user is None:
+        return HttpResponseForbidden()
+    document = get_object_or_404(Document, pk=document_id)
+    if not has_document_permission(request.corrux_user, document, "write"):
+        return HttpResponseForbidden()
+
+    _add_permission_shared(request, document=document)
+    return HttpResponseRedirect(reverse("ui-document-permissions", args=[document.id]))
+
+
+def folder_permissions(request, folder_id):
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    folder = get_object_or_404(Folder, pk=folder_id)
+    if not has_folder_permission(request.corrux_user, folder, "write"):
+        return render(
+            request, "ui/documentation/explorer.html", {"permission_denied": True}, status=403
+        )
+
+    context = _explorer_context(folder, request.corrux_user)
+    context["detail_drawer_html"] = _permissions_modal_html(
+        folder=folder,
+        toggle_url=reverse("ui-folder-permissions-toggle", args=[folder.id]),
+        remove_url=reverse("ui-folder-permissions-remove", args=[folder.id]),
+        add_url=reverse("ui-folder-permissions-add", args=[folder.id]),
+    )
+    return render(request, "ui/documentation/explorer.html", context)
+
+
+@require_POST
+def folder_permissions_toggle(request, folder_id):
+    if request.corrux_user is None:
+        return HttpResponseForbidden()
+    folder = get_object_or_404(Folder, pk=folder_id)
+    if not has_folder_permission(request.corrux_user, folder, "write"):
+        return HttpResponseForbidden()
+
+    _toggle_permission_shared(request, folder=folder)
+    return HttpResponseRedirect(reverse("ui-folder-permissions", args=[folder.id]))
+
+
+@require_POST
+def folder_permissions_remove(request, folder_id):
+    if request.corrux_user is None:
+        return HttpResponseForbidden()
+    folder = get_object_or_404(Folder, pk=folder_id)
+    if not has_folder_permission(request.corrux_user, folder, "write"):
+        return HttpResponseForbidden()
+
+    _remove_permission_shared(request, folder=folder)
+    return HttpResponseRedirect(reverse("ui-folder-permissions", args=[folder.id]))
+
+
+@require_POST
+def folder_permissions_add(request, folder_id):
+    if request.corrux_user is None:
+        return HttpResponseForbidden()
+    folder = get_object_or_404(Folder, pk=folder_id)
+    if not has_folder_permission(request.corrux_user, folder, "write"):
+        return HttpResponseForbidden()
+
+    _add_permission_shared(request, folder=folder)
+    return HttpResponseRedirect(reverse("ui-folder-permissions", args=[folder.id]))

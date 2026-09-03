@@ -1,0 +1,30 @@
+{% load ui_tags %}
+{% comment %}
+Composant Modal de contenu riche — UI-304. Troisième variante de la
+famille Modal (corrux_modal : confirmation destructive ;
+corrux_info_modal : information à liste ; corrux_content_modal :
+contenu riche avec ses propres formulaires internes). Un seul bouton de
+sortie, comme corrux_info_modal — mais `content` est un fragment HTML
+de confiance (comme corrux_drawer), jamais un simple message.
+{% endcomment %}
+<dialog
+  id="{{ modal_id }}"
+  class="corrux-modal corrux-modal--content"
+  role="dialog"
+  aria-labelledby="{{ modal_id }}-title"
+  {% if open %}open{% endif %}
+>
+  <div class="corrux-modal__content">
+    <div class="corrux-modal__header">
+      <h2 id="{{ modal_id }}-title" class="corrux-modal__title">{{ title }}</h2>
+    </div>
+    <div class="corrux-modal__body">
+      {{ content|safe }}
+    </div>
+    <div class="corrux-modal__actions">
+      <form method="dialog">
+        {% corrux_button label=close_label variant="secondary" type="submit" %}
+      </form>
+    </div>
+  </div>
+</dialog>

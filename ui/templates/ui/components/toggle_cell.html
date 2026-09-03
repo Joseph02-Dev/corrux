@@ -1,0 +1,18 @@
+{% load ui_tags %}
+{% comment %}
+Cellule togglable générique — introduite en UI-202, généralisée pour
+UI-304. Un formulaire minimal, zéro JavaScript : la bascule est un
+aller-retour serveur.
+{% endcomment %}
+<form method="post" action="{{ toggle_url }}" class="corrux-permission-cell">
+  {% csrf_token %}
+  {% for name, value in hidden_fields.items %}
+    <input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  <button
+    type="submit"
+    class="corrux-permission-cell__toggle{% if granted %} corrux-permission-cell__toggle--on{% endif %}"
+    aria-pressed="{% if granted %}true{% else %}false{% endif %}"
+    aria-label="{% if granted %}Retirer{% else %}Accorder{% endif %} {{ label }}"
+  >{% if granted %}{% corrux_icon name="check" %}{% endif %}</button>
+</form>

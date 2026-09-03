@@ -12,6 +12,9 @@
     <div class="corrux-toolbar">
       <h1 class="corrux-h1">Documents</h1>
       {% corrux_button label="Déposer un document" variant="primary" href=upload_url %}
+      {% if folder_permissions_url %}
+        {% corrux_button label="Gérer les permissions du dossier" variant="secondary" href=folder_permissions_url %}
+      {% endif %}
     </div>
 
     {% if is_empty %}

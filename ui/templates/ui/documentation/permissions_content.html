@@ -1,0 +1,18 @@
+{% load ui_tags %}
+{% comment %}
+Contenu du Modal de gestion des permissions — UI-304. Composant unique
+pour document et dossier (maquette Lot 3 §4) : ce fragment ne connaît
+que des données déjà préparées par la vue, jamais le type de cible.
+{% endcomment %}
+{% if rows_empty %}
+  {% corrux_empty_state message="Aucun accès particulier." %}
+{% else %}
+  {% corrux_table headers=table_headers rows=table_rows %}
+{% endif %}
+
+<h3 class="corrux-h3">Ajouter un accès</h3>
+<form method="post" action="{{ add_url }}" class="corrux-permissions-add-form">
+  {% csrf_token %}
+  {% corrux_field label="Rôle ou utilisateur" name="grantee" field_id="id_add_grantee" input_type="select" options=grantee_options %}
+  {% corrux_button label="Ajouter" variant="primary" type="submit" %}
+</form>

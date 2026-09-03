@@ -414,6 +414,10 @@ a.corrux-button {
   color: var(--corrux-color-text-secondary);
 }
 
+.corrux-modal__body {
+  margin: 0 0 var(--corrux-space-5) 0;
+}
+
 .corrux-modal__actions {
   display: flex;
   justify-content: flex-end;

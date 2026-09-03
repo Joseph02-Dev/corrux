@@ -1,0 +1,13 @@
+{% load ui_tags %}
+{% comment %}
+Formulaire minimal à un seul bouton — action serveur à sens unique
+(ex. retirer un accès), zéro JavaScript. Distinct de toggle_cell.html
+(état on/off) : ici, aucun état persistant à représenter visuellement.
+{% endcomment %}
+<form method="post" action="{{ action_url }}" class="corrux-inline-action-form">
+  {% csrf_token %}
+  {% for name, value in hidden_fields.items %}
+    <input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  {% corrux_button label=label variant=variant type="submit" %}
+</form>

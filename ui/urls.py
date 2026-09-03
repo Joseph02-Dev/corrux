@@ -55,4 +55,44 @@ urlpatterns = [
         views.document_edit,
         name="ui-document-edit",
     ),
+    path(
+        "documents/<int:document_id>/permissions/",
+        views.document_permissions,
+        name="ui-document-permissions",
+    ),
+    path(
+        "documents/<int:document_id>/permissions/basculer/",
+        views.document_permissions_toggle,
+        name="ui-document-permissions-toggle",
+    ),
+    path(
+        "documents/<int:document_id>/permissions/retirer/",
+        views.document_permissions_remove,
+        name="ui-document-permissions-remove",
+    ),
+    path(
+        "documents/<int:document_id>/permissions/ajouter/",
+        views.document_permissions_add,
+        name="ui-document-permissions-add",
+    ),
+    path(
+        "documents/dossier/<int:folder_id>/permissions/",
+        views.folder_permissions,
+        name="ui-folder-permissions",
+    ),
+    path(
+        "documents/dossier/<int:folder_id>/permissions/basculer/",
+        views.folder_permissions_toggle,
+        name="ui-folder-permissions-toggle",
+    ),
+    path(
+        "documents/dossier/<int:folder_id>/permissions/retirer/",
+        views.folder_permissions_remove,
+        name="ui-folder-permissions-remove",
+    ),
+    path(
+        "documents/dossier/<int:folder_id>/permissions/ajouter/",
+        views.folder_permissions_add,
+        name="ui-folder-permissions-add",
+    ),
 ]

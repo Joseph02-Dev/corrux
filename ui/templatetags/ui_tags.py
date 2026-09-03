@@ -457,23 +457,28 @@ def corrux_stat_card(label, value):
     return {"label": label, "value": value}
 
 
-@register.inclusion_tag("ui/components/permission_cell.html")
-def corrux_permission_cell(role_id, module_id, resource, action, granted, toggle_url):
-    """Cellule togglable de la matrice de permissions — UI-202.
+@register.inclusion_tag("ui/components/toggle_cell.html")
+def corrux_toggle_cell(hidden_fields, granted, toggle_url, label):
+    """Cellule togglable générique — introduit en UI-202 (matrice de
+    permissions de rôle), généralisé pour être réutilisé tel quel par
+    UI-304 (permissions document/dossier) : même mécanisme exact
+    (formulaire minimal par cellule, zéro JavaScript, aller-retour
+    serveur), seuls les champs cachés transmis diffèrent selon
+    l'appelant — pas un second composant quasi identique créé.
 
-    Un formulaire minimal par cellule (zéro JavaScript) : la bascule
-    est un aller-retour serveur, comme toute autre mutation du projet.
-    `granted` détermine uniquement le rendu visuel/accessible ; la
-    décision réelle (créer/supprimer la RolePermission) est prise côté
-    serveur par la vue cible, jamais ici.
-    """
+    `hidden_fields` : dict `{nom: valeur}` des champs cachés à
+    transmettre (ex. `{"role_id": ..., "module_id": ...}` pour la
+    matrice de rôle, ou `{"document_id": ..., "user_id": ...,
+    "action": ...}` pour une permission document). `granted` détermine
+    uniquement le rendu visuel/accessible ; la décision réelle
+    (créer/supprimer la permission) est prise côté serveur par la vue
+    cible, jamais ici. `label` : libellé accessible de la bascule (ex.
+    "core.audit.read" ou "Jean Dupont — lecture")."""
     return {
-        "role_id": role_id,
-        "module_id": module_id,
-        "resource": resource,
-        "action": action,
+        "hidden_fields": hidden_fields,
         "granted": granted,
         "toggle_url": toggle_url,
+        "label": label,
     }
 
 
@@ -486,3 +491,42 @@ def corrux_breadcrumb(items):
     composant, réutilisable par tout futur écran à arborescence (ex.
     future navigation RH)."""
     return {"items": items}
+
+
+@register.inclusion_tag("ui/components/content_modal.html")
+def corrux_content_modal(modal_id, title, content, close_label="Fermer", open=False):  # noqa: A002
+    """Modal de contenu riche — UI-304.
+
+    Troisième variante de la famille Modal, aux côtés de corrux_modal
+    (UI-204, confirmation destructive : Annuler + action) et
+    corrux_info_modal (UI-203, information à liste, une seule sortie) :
+    un seul bouton de sortie comme corrux_info_modal, mais `content`
+    est un fragment HTML de confiance déjà rendu par l'appelant (comme
+    corrux_drawer) — permet d'y inclure ses propres formulaires
+    internes (ex. les cellules togglables de gestion des permissions,
+    chacune son propre aller-retour serveur, indépendant du bouton
+    Fermer)."""
+    return {
+        "modal_id": modal_id,
+        "title": title,
+        "content": content,
+        "close_label": close_label,
+        "open": open,
+    }
+
+
+@register.inclusion_tag("ui/components/inline_action_form.html")
+def corrux_inline_action_form(hidden_fields, action_url, label, variant="secondary"):
+    """Formulaire minimal à un seul bouton — UI-304.
+
+    Action serveur ponctuelle et à sens unique (ex. retirer un accès),
+    avec des champs cachés, zéro JavaScript. Distinct de
+    corrux_toggle_cell (état on/off visuel persistant) : ici il n'y a
+    pas d'état "activé"/"désactivé" à représenter, seulement une
+    action déclenchée une fois."""
+    return {
+        "hidden_fields": hidden_fields,
+        "action_url": action_url,
+        "label": label,
+        "variant": variant,
+    }

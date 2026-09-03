@@ -397,6 +397,21 @@ def revoke_permission(*, actor: User, permission: DocumentPermission) -> None:
             metadata=metadata,
         )
 
+
+def list_permissions_for(
+    *, document: Document | None = None, folder: Folder | None = None
+) -> list[DocumentPermission]:
+    """Toutes les DocumentPermission portant directement sur ce document
+    OU ce dossier — UI-304. Exactement un des deux doit être fourni
+    (même contrainte que le modèle, TECH-020)."""
+    if document is not None:
+        return list(
+            DocumentPermission.objects.filter(document=document).select_related("role", "user")
+        )
+    return list(
+        DocumentPermission.objects.filter(folder=folder).select_related("role", "user")
+    )
+
 _NO_FOLDER_FILTER = object()  # sentinel : distinct de None (= racine)
 
 
