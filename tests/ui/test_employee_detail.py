@@ -186,11 +186,15 @@ class TestTabs:
         assert "Awa Sow" in second_content
 
     def test_other_tabs_are_rendered_disabled(self, employee, reader):
-        """UI-403/404/405 non construits — jamais un lien mort."""
+        """UI-404/405 non construits — jamais un lien mort. Documents
+        est désormais un lien réel (UI-403) : mise à jour nécessaire de
+        ce test, pas une régression — même situation que les
+        précédentes lorsqu'un onglet devient réellement fonctionnel."""
         client = _authenticated_client(reader)
         content = client.get(_detail_url(employee.id)).content.decode()
         tabs_html = content.split('class="corrux-tabs"')[1].split("</div>")[0]
-        assert tabs_html.count('aria-disabled="true"') == 3
+        assert tabs_html.count('aria-disabled="true"') == 2
+        assert f"/employes/{employee.id}/documents/" in tabs_html
         for label in ("Documents", "Contrats", "Congés"):
             assert label in tabs_html
 

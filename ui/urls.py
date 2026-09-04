@@ -109,4 +109,14 @@ urlpatterns = [
         name="ui-employee-deactivate",
     ),
     path("employes/<int:employee_id>/", views.employee_detail, name="ui-employee-detail"),
+    path(
+        "employes/<int:employee_id>/documents/",
+        views.employee_documents_tab,
+        name="ui-employee-documents",
+    ),
+    path(
+        "employes/<int:employee_id>/documents/deposer/",
+        views.employee_document_upload,
+        name="ui-employee-document-upload",
+    ),
 ]

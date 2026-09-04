@@ -53,9 +53,11 @@ from modules.documentation.services import (
 )
 from modules.rh.models import Employee
 from modules.rh.services import (
+    attach_document_to_employee,
     create_employee,
     deactivate_employee,
     employee_full_name,
+    list_employee_documents,
     update_employee,
 )
 from ui.navigation import module_is_activated
@@ -2535,7 +2537,7 @@ def _employee_record_tabs(employee, active_tab):
     UI-403/404/405 (critère d'acceptation explicite)."""
     tabs = [
         ("Informations", reverse("ui-employee-detail", args=[employee.id]), "informations"),
-        ("Documents", "", "documents"),
+        ("Documents", reverse("ui-employee-documents", args=[employee.id]), "documents"),
         ("Contrats", "", "contrats"),
         ("Congés", "", "conges"),
     ]
@@ -2589,3 +2591,156 @@ def employee_detail(request, employee_id):
         "employee": employee,
     }
     return render(request, "ui/employees/detail.html", context)
+
+
+# ============================================================================
+# UI-403 — Fiche employé : onglet Documents (intégration stricte Documentation)
+# ============================================================================
+#
+# Décision produit confirmée (Option B, audit Phase 1) : aucun dossier
+# Documentation dédié par employé (TECH-030/031 ne prévoit rien de tel
+# — un dossier par employé serait un changement d'architecture réel,
+# pas du câblage). L'onglet réutilise directement
+# list_employee_documents()/attach_document_to_employee() (TECH-034,
+# déjà construits et testés) : une liste filtrée par la table de
+# liaison RH (employee_documents), pas une navigation par dossier
+# Documentation. Mêmes composants (Table, Dropzone) que l'Explorateur/
+# le Dropzone Documentation (UI-301/302) — critère d'acceptation
+# explicite : « aucun composant documentaire nouveau créé ».
+#
+# Permission : « les permissions appliquées sont celles du module
+# Documentation » (maquette) — le contenu de CET onglet précis exige
+# documentation.document.read, une vérification SÉPARÉE et
+# ADDITIONNELLE à rh.employee.read (qui gate la fiche employé dans son
+# ensemble, UI-402). L'état "Permission denied" reste local à l'onglet
+# (en-tête + barre d'onglets restent visibles) — maquette : « États :
+# par onglet... Permission denied si l'utilisateur n'a pas accès à
+# l'onglet », pas la page entière masquée.
+
+
+def _employee_documents_access(request, employee_id):
+    """Vérifie rh.employee.read (accès à la fiche) PUIS
+    documentation.document.read (accès au contenu de cet onglet
+    précis, séparément) — retourne (employee, error_response)."""
+    employee = get_object_or_404(Employee, pk=employee_id)
+
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.employee.read"
+    ):
+        return None, render(
+            request, "ui/employees/detail.html", {"permission_denied": True}, status=403
+        )
+
+    can_edit = has_permission(request.corrux_user, "rh.employee.write")
+    header_html = _employee_record_header(employee, can_edit)
+    tabs_html = _employee_record_tabs(employee, "documents")
+
+    if not module_is_activated("documentation") or not has_permission(
+        request.corrux_user, "documentation.document.read"
+    ):
+        context = {
+            "header_html": header_html, "tabs_html": tabs_html, "tab_permission_denied": True,
+        }
+        return None, render(
+            request, "ui/employees/documents_tab.html", context, status=403
+        )
+
+    return employee, None
+
+
+def _employee_documents_context(employee, request):
+    documents = list_employee_documents(employee=employee, requesting_user=request.corrux_user)
+    table_rows = [
+        ui_tags.TableRow(
+            cells=(
+                document.filename,
+                document.mime_type,
+                _format_file_size(document.size_bytes),
+                _format_datetime(document.created_at),
+            ),
+        )
+        for document in documents
+    ]
+    can_edit = has_permission(request.corrux_user, "rh.employee.write")
+    return {
+        "header_html": _employee_record_header(employee, can_edit),
+        "tabs_html": _employee_record_tabs(employee, "documents"),
+        "table_headers": ["Nom", "Type", "Taille", "Créé le"],
+        "table_rows": table_rows,
+        "documents_empty": not documents,
+        "upload_url": reverse("ui-employee-document-upload", args=[employee.id]),
+    }
+
+
+@require_GET
+def employee_documents_tab(request, employee_id):
+    """Onglet Documents — UI-403."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(
+            f"{login_url}?next={reverse('ui-employee-documents', args=[employee_id])}"
+        )
+
+    employee, error_response = _employee_documents_access(request, employee_id)
+    if error_response is not None:
+        return error_response
+
+    context = _employee_documents_context(employee, request)
+    return render(request, "ui/employees/documents_tab.html", context)
+
+
+def _employee_upload_drawer_html(employee, upload_url, error_message=""):
+    fields_html = render_to_string(
+        "ui/employees/upload_fields.html", {"error_message": error_message}
+    )
+    return _component_html(
+        "ui/components/drawer.html", ui_tags.corrux_drawer,
+        drawer_id="employee-document-upload-drawer", title="Déposer un document",
+        content=fields_html, action=upload_url, method="post", submit_label="Déposer",
+        enctype="multipart/form-data", open=True,
+    )
+
+
+def employee_document_upload(request, employee_id):
+    """Dépôt de document depuis la fiche employé — UI-403.
+
+    Même composant Dropzone que UI-302 (sans variante RH, maquette),
+    mais rattache via attach_document_to_employee() (TECH-034) — jamais
+    upload_document() seul, pour créer le lien EmployeeDocument en plus
+    du dépôt Documentation."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    employee, error_response = _employee_documents_access(request, employee_id)
+    if error_response is not None:
+        return error_response
+
+    upload_url = reverse("ui-employee-document-upload", args=[employee.id])
+    error_message = ""
+
+    if request.method == "POST":
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            error_message = "Veuillez sélectionner un fichier."
+        else:
+            try:
+                attach_document_to_employee(
+                    employee=employee,
+                    content=uploaded_file.read(),
+                    filename=uploaded_file.name,
+                    owner_user=request.corrux_user,
+                    category=request.POST.get("category", "").strip(),
+                )
+            except DocumentUploadError as exc:
+                error_message = str(exc)
+            else:
+                return HttpResponseRedirect(reverse("ui-employee-documents", args=[employee.id]))
+    elif request.method not in ("GET", "HEAD"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
+    context = _employee_documents_context(employee, request)
+    context["upload_drawer_html"] = _employee_upload_drawer_html(
+        employee, upload_url, error_message
+    )
+    return render(request, "ui/employees/documents_tab.html", context)

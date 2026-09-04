@@ -300,12 +300,23 @@ def list_leave_requests_for_employee(employee: Employee) -> list[LeaveRequest]:
 
 
 def attach_document_to_employee(
-    *, employee: Employee, content: bytes, filename: str, owner_user: User
+    *, employee: Employee, content: bytes, filename: str, owner_user: User, category: str = ""
 ) -> int:
     """Dépose un nouveau document ET le rattache à l'employé, en un
     seul appel — via `documents_v1.attach()` exclusivement, jamais un
-    accès direct au stockage. Retourne le `document_ref` opaque."""
-    document_ref = attach(content=content, filename=filename, owner_user=owner_user)
+    accès direct au stockage. Retourne le `document_ref` opaque.
+
+    `category` : transmis tel quel à `attach()`, qui le supporte déjà
+    (TECH-024) — pas une extension de la frontière documents_v1.
+    `description` n'est volontairement pas exposé ici : `attach()` ne
+    le supporte pas (construit avant l'ajout de `description` à
+    `upload_document()`, UI-302) — plutôt que l'ignorer silencieusement
+    si un appelant le fournissait, ce paramètre n'existe simplement pas
+    tant que documents_v1 ne l'expose pas lui-même.
+    """
+    document_ref = attach(
+        content=content, filename=filename, owner_user=owner_user, category=category
+    )
     EmployeeDocument.objects.get_or_create(employee=employee, document_ref=document_ref)
     return document_ref
 

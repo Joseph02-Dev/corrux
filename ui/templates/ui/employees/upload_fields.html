@@ -1,0 +1,25 @@
+{% load ui_tags %}
+{% comment %}
+Champs du Drawer de dépôt côté fiche employé — UI-403. Mêmes primitives
+que ui/documentation/upload_fields.html (UI-302) — Dropzone, corrux_field,
+corrux_error_state — pas un nouveau composant. Deux différences
+honnêtes, pas des variantes RH inventées : aucun "Dossier cible" (RH
+n'a pas de notion de dossier, Option B, audit Phase 1 UI-403) et
+aucune "Description" (documents_v1.attach() ne la supporte pas —
+plutôt que l'ignorer silencieusement, le champ n'est simplement pas
+proposé).
+{% endcomment %}
+{% if error_message %}
+  {% corrux_error_state message=error_message %}
+{% endif %}
+<div class="corrux-field">
+  <span class="corrux-field__label">
+    Fichier<span class="corrux-field__required" aria-hidden="true">*</span>
+  </span>
+  <label for="id_employee_upload_file" class="corrux-dropzone">
+    <input type="file" id="id_employee_upload_file" name="file" class="corrux-dropzone__input" required>
+    <span class="corrux-dropzone__hint">Glissez-déposez un fichier ici, ou cliquez pour parcourir</span>
+    <span class="corrux-dropzone__types">PDF, DOCX, XLSX, JPG — 50 Mo max</span>
+  </label>
+</div>
+{% corrux_field label="Catégorie" name="category" field_id="id_employee_upload_category" %}
