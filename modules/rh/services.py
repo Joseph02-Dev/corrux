@@ -22,7 +22,8 @@ from __future__ import annotations
 from datetime import date
 
 from core.identity.models import User
-from modules.rh.models import Contract, Employee, LeaveRequest
+from modules.documentation.documents_v1 import DocumentMeta, attach, get, list_for_owner
+from modules.rh.models import Contract, Employee, EmployeeDocument, LeaveRequest
 
 
 def create_employee(
@@ -273,3 +274,74 @@ def list_leave_requests_for_employee(employee: Employee) -> list[LeaveRequest]:
     d'acceptation explicite : « statut visible par l'employé » (le
     champ `status` de chaque demande retournée)."""
     return list(LeaveRequest.objects.filter(employee=employee).order_by("-start_date"))
+
+
+# ============================================================================
+# TECH-034 — Rattachement de documents RH via `documents.v1`
+# ============================================================================
+#
+# Contrainte transverse impérative : RH ne crée jamais son propre
+# système documentaire. Tout document RH transite exclusivement par
+# `documents_v1.attach()`/`get()`/`list_for_owner()` (TECH-024) —
+# jamais un import de `modules.documentation.models`, jamais un accès
+# direct à `core.storage` (vérifié par analyse AST, tests dédiés).
+#
+# `EmployeeDocument` (TECH-030) est la seule table de liaison connue du
+# système — Documentation ne la connaît jamais (aucune relation dans
+# l'autre sens).
+#
+# Maquette Lot 4 (onglet Documents de la fiche employé) : « réutilisation
+# stricte de l'Explorateur Documentation... sans variante RH ». Le
+# dépôt réel passera par l'écran Documentation existant (UI-301/302,
+# déjà construit) ; ce service fournit donc à la fois une fonction de
+# dépôt+liaison en un seul appel (utile hors contexte HTTP, ex. tests,
+# scripts) ET une fonction de liaison seule pour un document déjà
+# déposé/sélectionné via l'Explorateur.
+
+
+def attach_document_to_employee(
+    *, employee: Employee, content: bytes, filename: str, owner_user: User
+) -> int:
+    """Dépose un nouveau document ET le rattache à l'employé, en un
+    seul appel — via `documents_v1.attach()` exclusivement, jamais un
+    accès direct au stockage. Retourne le `document_ref` opaque."""
+    document_ref = attach(content=content, filename=filename, owner_user=owner_user)
+    EmployeeDocument.objects.get_or_create(employee=employee, document_ref=document_ref)
+    return document_ref
+
+
+def link_document_to_employee(
+    *, employee: Employee, document_ref: int, requesting_user: User
+) -> EmployeeDocument:
+    """Rattache un document déjà existant (déposé ou sélectionné via
+    l'Explorateur Documentation, pas déposé ici) à un employé.
+
+    Revérifie l'accès via `documents_v1.get()` avant de créer le lien
+    — lève `DocumentNotAccessibleError` si `requesting_user` n'a pas le
+    droit de lire ce document, jamais une confiance aveugle dans le
+    `document_ref` fourni par l'appelant.
+    """
+    get(document_ref, requesting_user)
+    link, _ = EmployeeDocument.objects.get_or_create(
+        employee=employee, document_ref=document_ref
+    )
+    return link
+
+
+def list_employee_documents(
+    *, employee: Employee, requesting_user: User
+) -> list[DocumentMeta]:
+    """Documents rattachés à un employé.
+
+    Résout d'abord la table de liaison RH (`employee_documents`), puis
+    délègue exclusivement à `documents_v1.list_for_owner()` la
+    résolution des métadonnées ET la vérification de permission
+    (Option A, TECH-024) — RH ne connaît jamais les métadonnées
+    Documentation directement, jamais un accès aux modèles internes.
+    """
+    document_refs = list(
+        EmployeeDocument.objects.filter(employee=employee).values_list(
+            "document_ref", flat=True
+        )
+    )
+    return list_for_owner(document_refs, requesting_user)
