@@ -179,11 +179,25 @@ def update_contract(
     return contract
 
 
-def link_document_to_contract(*, contract: Contract, document_ref: int) -> Contract:
+def link_document_to_contract(
+    *, contract: Contract, document_ref: int, requesting_user: User
+) -> Contract:
     """Lie un document déjà déposé/sélectionné (via l'Explorateur
     Documentation) à un contrat existant — action séparée de l'édition
     complète (maquette : « Lier un document » comme action dédiée,
-    distincte des autres champs du Drawer Contrat)."""
+    distincte des autres champs du Drawer Contrat).
+
+    Correction (UI-404, audit Phase 1) : revérifie l'accès via
+    `documents_v1.get()` avant de lier — même garde que
+    `link_document_to_employee()` (TECH-034). Écart de sécurité réel
+    dans la version initiale de cette fonction (TECH-032), qui faisait
+    confiance aveuglément au `document_ref` fourni sans jamais vérifier
+    que l'appelant y avait seulement accès — surfacé par l'usage réel
+    de UI-404 (un utilisateur choisit un document via un sélecteur, il
+    faut revérifier qu'il y avait bien accès), corrigé ici plutôt que
+    laissé tel quel.
+    """
+    get(document_ref, requesting_user)
     contract.document_ref = document_ref
     contract.save(update_fields=["document_ref"])
     return contract

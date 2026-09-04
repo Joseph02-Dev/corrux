@@ -35,6 +35,7 @@ from core.modules.manager import (
     deactivate_module,
 )
 from core.modules.models import Module
+from modules.documentation.documents_v1 import DocumentNotAccessibleError, attach
 from modules.documentation.models import Document, DocumentPermission, Folder
 from modules.documentation.services import (
     MIME_TYPE_BY_EXTENSION,
@@ -51,13 +52,16 @@ from modules.documentation.services import (
     update_document,
     upload_document,
 )
-from modules.rh.models import Employee
+from modules.rh.models import Contract, Employee
 from modules.rh.services import (
     attach_document_to_employee,
+    create_contract,
     create_employee,
     deactivate_employee,
     employee_full_name,
+    link_document_to_contract,
     list_employee_documents,
+    update_contract,
     update_employee,
 )
 from ui.navigation import module_is_activated
@@ -2538,7 +2542,7 @@ def _employee_record_tabs(employee, active_tab):
     tabs = [
         ("Informations", reverse("ui-employee-detail", args=[employee.id]), "informations"),
         ("Documents", reverse("ui-employee-documents", args=[employee.id]), "documents"),
-        ("Contrats", "", "contrats"),
+        ("Contrats", reverse("ui-employee-contracts", args=[employee.id]), "contrats"),
         ("Congés", "", "conges"),
     ]
     return _component_html(
@@ -2744,3 +2748,489 @@ def employee_document_upload(request, employee_id):
         employee, upload_url, error_message
     )
     return render(request, "ui/employees/documents_tab.html", context)
+
+
+# ============================================================================
+# UI-404 — Fiche employé : onglet Contrats + Drawer contrat
+# ============================================================================
+#
+# Décision produit confirmée (Option A, audit Phase 1) : « Lier un
+# document » ouvre réellement l'Explorateur Documentation en mode
+# sélection — extension proportionnée, pas une réécriture. Ne touche
+# PAS document_explorer/_explorer_context (UI-301, déjà committés et
+# testés) : un sélecteur dédié réutilise directement les fonctions de
+# DONNÉES déjà partagées (list_visible_folder_contents/
+# folder_breadcrumb, modules.documentation.services) avec sa PROPRE
+# présentation (bouton « Choisir » au lieu d'un lien de consultation) —
+# zéro risque de régression sur les écrans déjà livrés.
+#
+# Correction de sécurité appliquée avant ce ticket (voir
+# modules/rh/services.py) : link_document_to_contract() revérifie
+# désormais l'accès via documents_v1.get() avant de lier — écart réel
+# de TECH-032, surfacé par l'usage réel de ce sélecteur.
+#
+# « Document lié » n'est proposé qu'en édition (le contrat doit déjà
+# exister pour que le sélecteur ait un contract_id à cibler) — jamais
+# à la création, cohérent avec le patron déjà établi pour les
+# permissions document/dossier (UI-304, accessible seulement depuis le
+# détail, jamais depuis un formulaire de création).
+
+
+def _document_picker_access(request, contract_id, folder_id=None):
+    """Même modèle d'accès à deux niveaux que UI-403 : rh.employee.write
+    (le sélecteur ne sert qu'à modifier un contrat) PUIS
+    documentation.document.read pour parcourir réellement."""
+    contract = get_object_or_404(Contract, pk=contract_id)
+
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.employee.write"
+    ):
+        return None, None, render(
+            request, "ui/employees/detail.html", {"permission_denied": True}, status=403
+        )
+
+    if not module_is_activated("documentation") or not has_permission(
+        request.corrux_user, "documentation.document.read"
+    ):
+        return None, None, render(
+            request, "ui/rh/document_picker.html", {"permission_denied": True}, status=403
+        )
+
+    folder = None
+    if folder_id is not None:
+        folder = get_object_or_404(Folder, pk=folder_id)
+        if not has_folder_permission(request.corrux_user, folder, "read"):
+            return None, None, render(
+                request, "ui/rh/document_picker.html", {"permission_denied": True}, status=403
+            )
+
+    return contract, folder, None
+
+
+def _document_picker_context(contract, folder, user):
+    documents, subfolders = list_visible_folder_contents(folder, user)
+
+    breadcrumb_items = [("Documents", reverse("ui-document-picker", args=[contract.id]))]
+    for ancestor in folder_breadcrumb(folder):
+        breadcrumb_items.append(
+            (ancestor.name, reverse("ui-document-picker-folder", args=[contract.id, ancestor.id]))
+        )
+
+    table_rows = []
+    for subfolder in subfolders:
+        table_rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    _component_html(
+                        "ui/components/button.html", ui_tags.corrux_button,
+                        label=subfolder.name, variant="tertiary",
+                        href=reverse(
+                            "ui-document-picker-folder", args=[contract.id, subfolder.id]
+                        ),
+                    ),
+                    "Dossier", "—", "",
+                ),
+            )
+        )
+    for document in documents:
+        choose_button = _component_html(
+            "ui/components/inline_action_form.html", ui_tags.corrux_inline_action_form,
+            hidden_fields={},
+            action_url=reverse("ui-document-picker-select", args=[contract.id, document.id]),
+            label="Choisir", variant="primary",
+        )
+        table_rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    document.filename, _format_file_size(document.size_bytes),
+                    _format_datetime(document.created_at), choose_button,
+                ),
+            )
+        )
+
+    folder_upload_url = (
+        reverse("ui-document-picker-upload-folder", args=[contract.id, folder.id])
+        if folder is not None
+        else reverse("ui-document-picker-upload", args=[contract.id])
+    )
+
+    return {
+        "breadcrumb_items": breadcrumb_items,
+        "table_headers": ["Nom", "Taille", "Créé le", ""],
+        "table_rows": table_rows,
+        "is_empty": not documents and not subfolders,
+        "upload_url": folder_upload_url,
+        "contract": contract,
+    }
+
+
+@require_GET
+def document_picker(request, contract_id, folder_id=None):
+    """Explorateur en mode sélection — UI-404 (Option A)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    contract, folder, error_response = _document_picker_access(request, contract_id, folder_id)
+    if error_response is not None:
+        return error_response
+
+    context = _document_picker_context(contract, folder, request.corrux_user)
+    return render(request, "ui/rh/document_picker.html", context)
+
+
+@require_POST
+def document_picker_select(request, contract_id, document_id):
+    """Choisit un document existant pour ce contrat — UI-404."""
+    contract = get_object_or_404(Contract, pk=contract_id)
+    if not has_permission(request.corrux_user, "rh.employee.write"):
+        return HttpResponseForbidden()
+
+    try:
+        link_document_to_contract(
+            contract=contract, document_ref=document_id, requesting_user=request.corrux_user
+        )
+    except DocumentNotAccessibleError:
+        return HttpResponseForbidden()
+
+    return HttpResponseRedirect(reverse("ui-employee-contracts", args=[contract.employee_id]))
+
+
+def _document_picker_upload_drawer_html(contract, upload_url, error_message=""):
+    fields_html = render_to_string(
+        "ui/employees/upload_fields.html", {"error_message": error_message}
+    )
+    return _component_html(
+        "ui/components/drawer.html", ui_tags.corrux_drawer,
+        drawer_id="document-picker-upload-drawer", title="Déposer un document",
+        content=fields_html, action=upload_url, method="post", submit_label="Déposer",
+        enctype="multipart/form-data", open=True,
+    )
+
+
+def document_picker_upload(request, contract_id, folder_id=None):
+    """Dépose un nouveau document et le lie immédiatement au contrat —
+    « sélectionner OU déposer » (maquette). Même Dropzone que UI-302,
+    dépôt via documents_v1.attach() (jamais un accès direct au
+    stockage), liaison via link_document_to_contract() (revérifie
+    l'accès)."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={request.path}")
+
+    contract, folder, error_response = _document_picker_access(request, contract_id, folder_id)
+    if error_response is not None:
+        return error_response
+
+    if folder is not None and not has_folder_permission(
+        request.corrux_user, folder, "write"
+    ):
+        return render(
+            request, "ui/rh/document_picker.html", {"permission_denied": True}, status=403
+        )
+
+    upload_url = (
+        reverse("ui-document-picker-upload-folder", args=[contract.id, folder.id])
+        if folder is not None
+        else reverse("ui-document-picker-upload", args=[contract.id])
+    )
+    error_message = ""
+
+    if request.method == "POST":
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            error_message = "Veuillez sélectionner un fichier."
+        else:
+            try:
+                document_ref = attach(
+                    content=uploaded_file.read(), filename=uploaded_file.name,
+                    owner_user=request.corrux_user, folder=folder,
+                    category=request.POST.get("category", "").strip(),
+                )
+            except DocumentUploadError as exc:
+                error_message = str(exc)
+            else:
+                link_document_to_contract(
+                    contract=contract, document_ref=document_ref,
+                    requesting_user=request.corrux_user,
+                )
+                return HttpResponseRedirect(
+                    reverse("ui-employee-contracts", args=[contract.employee_id])
+                )
+    elif request.method not in ("GET", "HEAD"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
+    context = _document_picker_context(contract, folder, request.corrux_user)
+    context["upload_drawer_html"] = _document_picker_upload_drawer_html(
+        contract, upload_url, error_message
+    )
+    return render(request, "ui/rh/document_picker.html", context)
+
+
+# --- Onglet Contrats ---------------------------------------------------------------
+
+
+def _contract_table_rows(contracts):
+    rows = []
+    for contract in contracts:
+        document_label = f"Document #{contract.document_ref}" if contract.document_ref else "—"
+        actions = _modal_trigger_html(
+            modal_id=f"edit-contract-{contract.id}", label="Modifier", variant="secondary"
+        )
+        rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    contract.type,
+                    contract.start_date.strftime("%d/%m/%Y"),
+                    contract.end_date.strftime("%d/%m/%Y") if contract.end_date else "—",
+                    contract.get_status_display(),
+                    document_label,
+                ),
+                actions_html=actions,
+            )
+        )
+    return rows
+
+
+def _contract_status_options():
+    return [(value, label) for value, label in Contract.Status.choices]
+
+
+def _contract_create_drawer_content(errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    return "".join(
+        [
+            _field_html(
+                label="Type de contrat", name="type", field_id="id_create_contract_type",
+                value=values.get("type", ""), required=True, error=errors.get("type", ""),
+            ),
+            _field_html(
+                label="Date de début", name="start_date", field_id="id_create_contract_start",
+                input_type="date", value=values.get("start_date", ""), required=True,
+                error=errors.get("start_date", ""),
+            ),
+            _field_html(
+                label="Date de fin (si applicable)", name="end_date",
+                field_id="id_create_contract_end", input_type="date",
+                value=values.get("end_date", ""), error=errors.get("end_date", ""),
+            ),
+            _field_html(
+                label="Statut", name="status", field_id="id_create_contract_status",
+                input_type="select", options=_contract_status_options(),
+                value=values.get("status", Contract.Status.ACTIVE),
+            ),
+            '<p class="corrux-text-small">Le document contractuel peut être lié une fois '
+            "le contrat créé, depuis la fiche employé.</p>",
+        ]
+    )
+
+
+def _contract_edit_drawer_content(contract, errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    document_section = (
+        f'<p class="corrux-text-small">Document lié : Document #{contract.document_ref}</p>'
+        if contract.document_ref
+        else '<p class="corrux-text-small">Aucun document lié.</p>'
+    )
+    link_button = _component_html(
+        "ui/components/button.html", ui_tags.corrux_button,
+        label="Lier un document", variant="secondary",
+        href=reverse("ui-document-picker", args=[contract.id]),
+    )
+    return "".join(
+        [
+            _field_html(
+                label="Type de contrat", name="type",
+                field_id=f"id_edit_contract_{contract.id}_type",
+                value=values.get("type", contract.type), required=True,
+                error=errors.get("type", ""),
+            ),
+            _field_html(
+                label="Date de début", name="start_date",
+                field_id=f"id_edit_contract_{contract.id}_start", input_type="date",
+                value=values.get("start_date", contract.start_date.isoformat()), required=True,
+                error=errors.get("start_date", ""),
+            ),
+            _field_html(
+                label="Date de fin (si applicable)", name="end_date",
+                field_id=f"id_edit_contract_{contract.id}_end", input_type="date",
+                value=values.get(
+                    "end_date", contract.end_date.isoformat() if contract.end_date else ""
+                ),
+                error=errors.get("end_date", ""),
+            ),
+            _field_html(
+                label="Statut", name="status",
+                field_id=f"id_edit_contract_{contract.id}_status", input_type="select",
+                options=_contract_status_options(),
+                value=values.get("status", contract.status),
+            ),
+            document_section,
+            link_button,
+        ]
+    )
+
+
+def _render_employee_contracts_page(
+    request, employee, *, open_drawer_id="",
+    create_errors=None, create_values=None,
+    edit_contract_id=None, edit_errors=None, edit_values=None,
+    http_status=200,
+):
+    contracts = list(Contract.objects.filter(employee=employee).order_by("-start_date"))
+    can_edit = has_permission(request.corrux_user, "rh.employee.write")
+
+    edit_drawers_html = "".join(
+        _component_html(
+            "ui/components/drawer.html", ui_tags.corrux_drawer,
+            drawer_id=f"edit-contract-{c.id}", title=f"Modifier le contrat « {c.type} »",
+            action=reverse("ui-employee-contract-edit", args=[employee.id, c.id]),
+            content=_contract_edit_drawer_content(
+                c,
+                errors=(edit_errors if edit_contract_id == c.id else None),
+                values=(edit_values if edit_contract_id == c.id else None),
+            ),
+            open=(open_drawer_id == f"edit-contract-{c.id}"),
+        )
+        for c in contracts
+    )
+
+    context = {
+        "header_html": _employee_record_header(employee, can_edit),
+        "tabs_html": _employee_record_tabs(employee, "contrats"),
+        "table_headers": ["Type", "Début", "Fin", "Statut", "Document lié", "Actions"],
+        "table_rows": _contract_table_rows(contracts) if contracts else [],
+        "contracts_empty": not contracts,
+        "can_edit": can_edit,
+        "create_drawer_content": _contract_create_drawer_content(create_errors, create_values),
+        "create_url": reverse("ui-employee-contract-create", args=[employee.id]),
+        "create_drawer_open": open_drawer_id == "create-contract",
+        "edit_drawers_html": edit_drawers_html,
+    }
+    return render(request, "ui/employees/contracts_tab.html", context, status=http_status)
+
+
+@require_GET
+def employee_contracts_tab(request, employee_id):
+    """Onglet Contrats — UI-404."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(
+            f"{login_url}?next={reverse('ui-employee-contracts', args=[employee_id])}"
+        )
+
+    employee = get_object_or_404(Employee, pk=employee_id)
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.employee.read"
+    ):
+        return render(
+            request, "ui/employees/detail.html", {"permission_denied": True}, status=403
+        )
+
+    return _render_employee_contracts_page(request, employee)
+
+
+def _parse_contract_date(raw_value):
+    try:
+        return date.fromisoformat(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+@require_permission("rh.employee.write")
+@require_POST
+def employee_contract_create(request, employee_id):
+    employee = get_object_or_404(Employee, pk=employee_id)
+
+    contract_type = request.POST.get("type", "").strip()
+    start_date_raw = request.POST.get("start_date", "").strip()
+    end_date_raw = request.POST.get("end_date", "").strip()
+    status = request.POST.get("status", Contract.Status.ACTIVE).strip()
+
+    errors = {}
+    if not contract_type:
+        errors["type"] = "Ce champ est requis."
+    start_date_value = _parse_contract_date(start_date_raw)
+    if not start_date_raw:
+        errors["start_date"] = "Ce champ est requis."
+    elif start_date_value is None:
+        errors["start_date"] = "Date invalide."
+    end_date_value = _parse_contract_date(end_date_raw) if end_date_raw else None
+    if end_date_raw and end_date_value is None:
+        errors["end_date"] = "Date invalide."
+
+    values = {
+        "type": contract_type, "start_date": start_date_raw, "end_date": end_date_raw,
+        "status": status,
+    }
+    if errors:
+        return _render_employee_contracts_page(
+            request, employee, open_drawer_id="create-contract",
+            create_errors=errors, create_values=values, http_status=400,
+        )
+
+    create_contract(
+        employee=employee, type=contract_type, start_date=start_date_value,
+        end_date=end_date_value, status=status,
+    )
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.contract_create",
+        target=employee_full_name(employee), metadata={"type": contract_type},
+    )
+    return HttpResponseRedirect(reverse("ui-employee-contracts", args=[employee.id]))
+
+
+@require_permission("rh.employee.write")
+def employee_contract_edit(request, employee_id, contract_id):
+    employee = get_object_or_404(Employee, pk=employee_id)
+    contract = get_object_or_404(Contract, pk=contract_id, employee=employee)
+
+    if request.method not in ("GET", "HEAD", "POST"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
+    if request.method != "POST":
+        return _render_employee_contracts_page(
+            request, employee, open_drawer_id=f"edit-contract-{contract.id}"
+        )
+
+    contract_type = request.POST.get("type", "").strip()
+    start_date_raw = request.POST.get("start_date", "").strip()
+    end_date_raw = request.POST.get("end_date", "").strip()
+    status = request.POST.get("status", "").strip()
+
+    errors = {}
+    if not contract_type:
+        errors["type"] = "Ce champ est requis."
+    start_date_value = _parse_contract_date(start_date_raw)
+    if not start_date_raw:
+        errors["start_date"] = "Ce champ est requis."
+    elif start_date_value is None:
+        errors["start_date"] = "Date invalide."
+    end_date_value = _parse_contract_date(end_date_raw) if end_date_raw else None
+    if end_date_raw and end_date_value is None:
+        errors["end_date"] = "Date invalide."
+
+    values = {
+        "type": contract_type, "start_date": start_date_raw, "end_date": end_date_raw,
+        "status": status,
+    }
+    if errors:
+        return _render_employee_contracts_page(
+            request, employee, open_drawer_id=f"edit-contract-{contract.id}",
+            edit_contract_id=contract.id, edit_errors=errors, edit_values=values,
+            http_status=400,
+        )
+
+    update_contract(
+        contract=contract, type=contract_type, start_date=start_date_value,
+        end_date=end_date_value, status=status, document_ref=contract.document_ref,
+    )
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.contract_update",
+        target=employee_full_name(employee), metadata={"type": contract_type},
+    )
+    return HttpResponseRedirect(reverse("ui-employee-contracts", args=[employee.id]))

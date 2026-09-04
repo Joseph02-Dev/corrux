@@ -115,23 +115,51 @@ class TestUpdateContract:
 
 @pytest.mark.django_db
 class TestDocumentLinking:
-    def test_link_document_to_contract(self, employee):
+    def test_link_document_to_contract(self, employee, storage_root):
+        owner = User.objects.create(username="proprietaire_link_contrat", full_name="P")
+        document_ref = attach(content=b"x", filename="contrat.pdf", owner_user=owner)
         contract = create_contract(employee=employee, type="CDI", start_date=date(2026, 1, 1))
-        updated = link_document_to_contract(contract=contract, document_ref=7)
+
+        updated = link_document_to_contract(
+            contract=contract, document_ref=document_ref, requesting_user=owner
+        )
 
         updated.refresh_from_db()
-        assert updated.document_ref == 7
+        assert updated.document_ref == document_ref
 
-    def test_link_does_not_touch_other_fields(self, employee):
+    def test_link_does_not_touch_other_fields(self, employee, storage_root):
+        owner = User.objects.create(username="proprietaire_link_contrat2", full_name="P2")
+        document_ref = attach(content=b"x", filename="x.pdf", owner_user=owner)
         contract = create_contract(
             employee=employee, type="CDI", start_date=date(2026, 1, 1),
             status=Contract.Status.ACTIVE,
         )
-        link_document_to_contract(contract=contract, document_ref=7)
+
+        link_document_to_contract(
+            contract=contract, document_ref=document_ref, requesting_user=owner
+        )
 
         contract.refresh_from_db()
         assert contract.type == "CDI"
         assert contract.status == Contract.Status.ACTIVE
+
+    def test_link_refuses_a_document_the_requester_cannot_access(self, employee, storage_root):
+        """Correction de sécurité (UI-404, audit Phase 1) : ne fait
+        plus jamais confiance aveuglément au document_ref fourni."""
+        from modules.documentation.documents_v1 import DocumentNotAccessibleError
+
+        owner = User.objects.create(username="proprietaire_link_contrat3", full_name="P3")
+        other_user = User.objects.create(username="sans_acces_link_contrat", full_name="Autre")
+        document_ref = attach(content=b"x", filename="prive.pdf", owner_user=owner)
+        contract = create_contract(employee=employee, type="CDI", start_date=date(2026, 1, 1))
+
+        with pytest.raises(DocumentNotAccessibleError):
+            link_document_to_contract(
+                contract=contract, document_ref=document_ref, requesting_user=other_user
+            )
+
+        contract.refresh_from_db()
+        assert contract.document_ref is None
 
     def test_create_with_a_real_document_ref_end_to_end(
         self, employee, owner, storage_root

@@ -119,4 +119,44 @@ urlpatterns = [
         views.employee_document_upload,
         name="ui-employee-document-upload",
     ),
+    path(
+        "documents/pour-contrat/<int:contract_id>/",
+        views.document_picker,
+        name="ui-document-picker",
+    ),
+    path(
+        "documents/pour-contrat/<int:contract_id>/dossier/<int:folder_id>/",
+        views.document_picker,
+        name="ui-document-picker-folder",
+    ),
+    path(
+        "documents/pour-contrat/<int:contract_id>/choisir/<int:document_id>/",
+        views.document_picker_select,
+        name="ui-document-picker-select",
+    ),
+    path(
+        "documents/pour-contrat/<int:contract_id>/deposer/",
+        views.document_picker_upload,
+        name="ui-document-picker-upload",
+    ),
+    path(
+        "documents/pour-contrat/<int:contract_id>/dossier/<int:folder_id>/deposer/",
+        views.document_picker_upload,
+        name="ui-document-picker-upload-folder",
+    ),
+    path(
+        "employes/<int:employee_id>/contrats/",
+        views.employee_contracts_tab,
+        name="ui-employee-contracts",
+    ),
+    path(
+        "employes/<int:employee_id>/contrats/nouveau/",
+        views.employee_contract_create,
+        name="ui-employee-contract-create",
+    ),
+    path(
+        "employes/<int:employee_id>/contrats/<int:contract_id>/modifier/",
+        views.employee_contract_edit,
+        name="ui-employee-contract-edit",
+    ),
 ]
