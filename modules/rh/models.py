@@ -72,6 +72,18 @@ peut être à durée indéterminée (maquette : "Date de fin (si
 applicable)") et un contrat peut être créé avant qu'un document ne lui
 soit lié (maquette : action « Lier un document » séparée de la
 création).
+
+Décision produit confirmée (TECH-033, postérieure à la pose initiale
+de ce schéma) : LeaveRequest.comment et LeaveRequest.approver_comment
+ajoutés après coup, hors §7 littéral — même constat que pour email
+(TECH-031) et Contract.status (TECH-032) : le texte même de TECH-033
+("commentaire facultatif" à la création ; "refus exige un commentaire
+du valideur") et maquettes-ui-v1-lot4.md (Drawer Nouvelle demande +
+Modal Décision congé) convergent tous deux sur ces deux champs
+manquants. Deux champs distincts : `comment` (employé, facultatif,
+saisi à la création) et `approver_comment` (valideur, obligatoire
+uniquement en cas de refus — règle appliquée côté service, pas une
+contrainte NOT NULL en base).
 """
 
 from __future__ import annotations
@@ -175,6 +187,17 @@ class LeaveRequest(models.Model):
     type = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField()
+    # Décision produit confirmée (TECH-033, audit Phase 1) : absents de
+    # §7, requis de façon convergente par le texte même du ticket et
+    # par maquettes-ui-v1-lot4.md (Drawer Nouvelle demande de congé +
+    # Modal Décision congé). Deux champs distincts, pas un seul : le
+    # commentaire de l'employé (facultatif, à la création) et le
+    # commentaire du valideur (obligatoire uniquement en cas de refus —
+    # règle appliquée côté service, reject_leave_request(), pas une
+    # contrainte NOT NULL en base puisqu'une validation n'en a besoin).
+    # TextField : même précédent déjà établi que
+    # DocumentMetadata.value (TECH-020), pas un nouveau type inventé.
+    comment = models.TextField(blank=True, default="")
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
@@ -185,6 +208,7 @@ class LeaveRequest(models.Model):
         blank=True,
         related_name="approved_leave_requests",
     )
+    approver_comment = models.TextField(blank=True, default="")
 
     class Meta:
         app_label = "rh"

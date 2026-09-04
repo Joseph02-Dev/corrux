@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from modules.rh.models import Contract, Employee
+from core.identity.models import User
+from modules.rh.models import Contract, Employee, LeaveRequest
 
 
 def create_employee(
@@ -185,3 +186,90 @@ def link_document_to_contract(*, contract: Contract, document_ref: int) -> Contr
     contract.document_ref = document_ref
     contract.save(update_fields=["document_ref"])
     return contract
+
+
+# ============================================================================
+# TECH-033 — Congés/absences (création, statut, validation/refus)
+# ============================================================================
+#
+# « Solde de jours hors périmètre » (décision Lot 4 finale #3) : aucun
+# calcul, aucun champ de solde nulle part dans ce module.
+#
+# Critère d'acceptation explicite : refus sans commentaire rejeté —
+# appliqué côté service (LeaveRequestDecisionError), pas une contrainte
+# NOT NULL en base (une validation n'a besoin d'aucun commentaire).
+
+
+class LeaveRequestDecisionError(Exception):
+    """Levée quand une décision de congé est invalide — ex. refus
+    tenté sans commentaire (critère d'acceptation explicite)."""
+
+
+def create_leave_request(
+    *,
+    employee: Employee,
+    type: str,
+    start_date: date,
+    end_date: date,
+    comment: str = "",
+) -> LeaveRequest:
+    """Crée une demande de congé. Statut par défaut : En attente
+    (LeaveRequest.Status.PENDING, TECH-030). Aucun calcul de solde."""
+    return LeaveRequest.objects.create(
+        employee=employee,
+        type=type,
+        start_date=start_date,
+        end_date=end_date,
+        comment=comment,
+    )
+
+
+def approve_leave_request(*, leave_request: LeaveRequest, approver: User) -> LeaveRequest:
+    """Approuve une demande — aucun commentaire requis pour une
+    approbation (maquette : « Variante A — Validation (confirmation
+    simple) », contrairement au refus)."""
+    leave_request.status = LeaveRequest.Status.APPROVED
+    leave_request.approver_user = approver
+    leave_request.save(update_fields=["status", "approver_user"])
+    return leave_request
+
+
+def reject_leave_request(
+    *, leave_request: LeaveRequest, approver: User, comment: str
+) -> LeaveRequest:
+    """Refuse une demande.
+
+    Critère d'acceptation explicite du ticket : un commentaire est
+    obligatoire (« refus exige un commentaire du valideur, visible par
+    l'employé ») — une chaîne vide ou uniquement des espaces est
+    refusée, aucune écriture n'a lieu si la validation échoue
+    (LeaveRequestDecisionError levée avant tout .save()).
+    """
+    if not comment.strip():
+        raise LeaveRequestDecisionError(
+            "Un commentaire est requis pour refuser une demande de congé."
+        )
+    leave_request.status = LeaveRequest.Status.REJECTED
+    leave_request.approver_user = approver
+    leave_request.approver_comment = comment
+    leave_request.save(update_fields=["status", "approver_user", "approver_comment"])
+    return leave_request
+
+
+def list_pending_leave_requests() -> list[LeaveRequest]:
+    """Toutes les demandes en attente, tous employés confondus — file
+    d'attente du valideur (maquette : « Congés à traiter »). Critère
+    d'acceptation explicite : « demande visible par le valideur »."""
+    return list(
+        LeaveRequest.objects.filter(status=LeaveRequest.Status.PENDING)
+        .select_related("employee")
+        .order_by("start_date")
+    )
+
+
+def list_leave_requests_for_employee(employee: Employee) -> list[LeaveRequest]:
+    """Toutes les demandes d'un employé donné — vue personnelle
+    (maquette : onglet Congés de la fiche employé). Critère
+    d'acceptation explicite : « statut visible par l'employé » (le
+    champ `status` de chaque demande retournée)."""
+    return list(LeaveRequest.objects.filter(employee=employee).order_by("-start_date"))
