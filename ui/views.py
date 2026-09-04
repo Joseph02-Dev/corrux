@@ -52,8 +52,10 @@ from modules.documentation.services import (
     update_document,
     upload_document,
 )
-from modules.rh.models import Contract, Employee
+from modules.rh.models import Contract, Employee, LeaveRequest
 from modules.rh.services import (
+    LeaveRequestDecisionError,
+    approve_leave_request,
     attach_document_to_employee,
     create_contract,
     create_employee,
@@ -63,6 +65,8 @@ from modules.rh.services import (
     link_document_to_contract,
     list_employee_documents,
     list_leave_requests_for_employee,
+    list_pending_leave_requests,
+    reject_leave_request,
     update_contract,
     update_employee,
 )
@@ -3442,3 +3446,150 @@ def employee_leave_request_create(request, employee_id):
         target=employee_full_name(employee), metadata={"type": leave_type},
     )
     return HttpResponseRedirect(reverse("ui-employee-leave", args=[employee.id]))
+
+
+# ============================================================================
+# UI-406 — Congés à traiter + Modal de décision
+# ============================================================================
+#
+# Permission (décision documentée, cohérente avec les tickets
+# précédents) : rh.leave_request.approve — pas rh.conge.valider
+# (maquette, français, jamais implémenté nulle part, même écart déjà
+# résolu en Option A, TECH-035). Le lien Sidebar « Congés » (UI-102,
+# jamais câblé jusqu'ici, href="#") pointe désormais vers cet écran —
+# corrigé pour vérifier rh.leave_request.approve au lieu du
+# rh.leave_request.read trop large actuellement utilisé (aurait laissé
+# un lien mort pour un utilisateur avec read seul, sans approve).
+#
+# « Modal à 2 variantes » : réutilise deux composants Modal déjà
+# établis, pas un nouveau composant — corrux_modal (UI-204,
+# confirmation simple) pour Valider ; corrux_content_modal (UI-304,
+# contenu riche avec son propre formulaire) pour Refuser, qui exige un
+# commentaire (TECH-033, critère d'acceptation explicite : « refus
+# sans commentaire rejeté »).
+#
+# Critère d'acceptation explicite du ticket : « une décision met à jour
+# le statut visible dans UI-405 pour l'employé concerné » — vérifié
+# bout en bout par test (décision ici, statut relu depuis l'écran
+# UI-405 réel).
+
+
+def _leave_queue_rows(leave_requests, *, error_for_id=None, error_message=""):
+    rows = []
+    for leave in leave_requests:
+        validate_modal_html = _component_html(
+            "ui/components/modal.html", ui_tags.corrux_modal,
+            modal_id=f"approve-leave-{leave.id}", title="Valider cette demande",
+            message=(
+                f"La demande de « {employee_full_name(leave.employee)} » "
+                f"({leave.type}, du {leave.start_date:%d/%m/%Y} au {leave.end_date:%d/%m/%Y}) "
+                "sera marquée comme approuvée."
+            ),
+            confirm_label="Valider",
+            action=reverse("ui-leave-request-approve", args=[leave.id]),
+        )
+        is_erroring_row = leave.id == error_for_id
+        reject_content = render_to_string(
+            "ui/rh/reject_modal_content.html",
+            {
+                "action_url": reverse("ui-leave-request-reject", args=[leave.id]),
+                "field_id": f"id_reject_comment_{leave.id}",
+                "error_message": error_message if is_erroring_row else "",
+            },
+        )
+        reject_modal_html = _component_html(
+            "ui/components/content_modal.html", ui_tags.corrux_content_modal,
+            modal_id=f"reject-leave-{leave.id}", title="Refuser cette demande",
+            content=reject_content, open=is_erroring_row,
+        )
+        actions = (
+            _modal_trigger_html(
+                modal_id=f"approve-leave-{leave.id}", label="Valider", variant="primary"
+            )
+            + _modal_trigger_html(
+                modal_id=f"reject-leave-{leave.id}", label="Refuser", variant="danger"
+            )
+            + validate_modal_html
+            + reject_modal_html
+        )
+        rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    employee_full_name(leave.employee),
+                    leave.type,
+                    leave.start_date.strftime("%d/%m/%Y"),
+                    leave.end_date.strftime("%d/%m/%Y"),
+                    leave.comment or "—",
+                    leave.get_status_display(),
+                ),
+                actions_html=actions,
+            )
+        )
+    return rows
+
+
+@require_GET
+def leave_requests_queue(request):
+    """Congés à traiter — UI-406."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-leave-requests-queue')}")
+
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.leave_request.approve"
+    ):
+        return render(
+            request, "ui/rh/leave_queue.html", {"permission_denied": True}, status=403
+        )
+
+    leave_requests = list_pending_leave_requests()
+    context = {
+        "table_headers": ["Employé", "Type", "Début", "Fin", "Commentaire", "Statut"],
+        "table_rows": _leave_queue_rows(leave_requests),
+        "queue_empty": not leave_requests,
+    }
+    return render(request, "ui/rh/leave_queue.html", context)
+
+
+@require_permission("rh.leave_request.approve")
+@require_POST
+def leave_request_approve(request, leave_request_id):
+    leave_request = get_object_or_404(LeaveRequest, pk=leave_request_id)
+    approve_leave_request(leave_request=leave_request, approver=request.corrux_user)
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.leave_request_approve",
+        target=employee_full_name(leave_request.employee), metadata={},
+    )
+    return HttpResponseRedirect(reverse("ui-leave-requests-queue"))
+
+
+@require_permission("rh.leave_request.approve")
+@require_POST
+def leave_request_reject(request, leave_request_id):
+    """Refus — critère d'acceptation explicite du ticket backend
+    (TECH-033) : commentaire obligatoire, appliqué ici par
+    reject_leave_request() elle-même, jamais recalculé côté vue."""
+    leave_request = get_object_or_404(LeaveRequest, pk=leave_request_id)
+    comment = request.POST.get("comment", "").strip()
+
+    try:
+        reject_leave_request(
+            leave_request=leave_request, approver=request.corrux_user, comment=comment
+        )
+    except LeaveRequestDecisionError as exc:
+        leave_requests = list_pending_leave_requests()
+        context = {
+            "table_headers": ["Employé", "Type", "Début", "Fin", "Commentaire", "Statut"],
+            "table_rows": _leave_queue_rows(
+                leave_requests, error_for_id=leave_request.id, error_message=str(exc)
+            ),
+            "queue_empty": not leave_requests,
+        }
+        return render(request, "ui/rh/leave_queue.html", context, status=400)
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.leave_request_reject",
+        target=employee_full_name(leave_request.employee), metadata={"comment": comment},
+    )
+    return HttpResponseRedirect(reverse("ui-leave-requests-queue"))

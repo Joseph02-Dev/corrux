@@ -165,4 +165,15 @@ urlpatterns = [
         views.employee_leave_request_create,
         name="ui-employee-leave-create",
     ),
+    path("conges-a-traiter/", views.leave_requests_queue, name="ui-leave-requests-queue"),
+    path(
+        "conges-a-traiter/<int:leave_request_id>/valider/",
+        views.leave_request_approve,
+        name="ui-leave-request-approve",
+    ),
+    path(
+        "conges-a-traiter/<int:leave_request_id>/refuser/",
+        views.leave_request_reject,
+        name="ui-leave-request-reject",
+    ),
 ]

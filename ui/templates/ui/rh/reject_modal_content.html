@@ -1,0 +1,15 @@
+{% load ui_tags %}
+{% comment %}
+Contenu du Modal de refus — UI-406, Variante B du composant Décision
+congé. Commentaire obligatoire (TECH-033 : refus sans commentaire
+rejeté) — champ requis côté formulaire, validation réelle côté serveur
+dans tous les cas.
+{% endcomment %}
+{% if error_message %}
+  {% corrux_error_state message=error_message %}
+{% endif %}
+<form method="post" action="{{ action_url }}">
+  {% csrf_token %}
+  {% corrux_field label="Commentaire du valideur" name="comment" field_id=field_id required=True %}
+  {% corrux_button label="Refuser" variant="danger" type="submit" %}
+</form>
