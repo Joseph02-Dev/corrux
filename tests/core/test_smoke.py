@@ -35,12 +35,14 @@ def test_create_schemas_command_creates_the_three_schemas():
 
 
 def test_documentation_and_rh_apps_are_installed():
-    """Documentation et RH sont bien enregistrées.
+    """Documentation et RH sont bien enregistrées, avec leurs modèles
+    réels.
 
-    Documentation possède désormais ses modèles (TECH-020) — mise à jour
-    nécessaire de ce test hérité d'INIT-001, qui affirmait littéralement
-    l'absence de modèle à ce stade initial, désormais dépassé par
-    conception. RH reste un squelette vide, non concerné par ce ticket.
+    Documentation possède ses modèles depuis TECH-020 ; RH depuis
+    TECH-030 — mise à jour nécessaire de ce test hérité d'INIT-001, qui
+    affirmait littéralement l'absence de modèle à ce stade initial pour
+    les deux apps, désormais dépassé par conception pour chacune d'elles
+    successivement.
     """
     from django.apps import apps
 
@@ -53,4 +55,9 @@ def test_documentation_and_rh_apps_are_installed():
         "DocumentPermission",
         "DocumentMetadata",
     }
-    assert list(rh_app.get_models()) == []
+    assert {m.__name__ for m in rh_app.get_models()} == {
+        "Employee",
+        "Contract",
+        "LeaveRequest",
+        "EmployeeDocument",
+    }

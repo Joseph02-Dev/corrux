@@ -254,15 +254,26 @@ class TestListForOwner:
 
 @pytest.mark.django_db
 class TestIndependentOfRH:
-    def test_no_rh_module_is_required(self, storage_root, owner):
-        """Le module modules.rh reste un squelette vide — cette suite
-        entière fonctionne sans lui, conformément au critère
-        d'acceptation explicite du ticket."""
+    def test_documents_v1_works_without_any_rh_business_logic(self, storage_root, owner):
+        """Le module modules.rh possède désormais son schéma (TECH-030)
+        mais aucune logique métier/service — cette suite entière
+        fonctionne sans qu'aucun code RH ne soit appelé, conformément
+        au critère d'acceptation explicite du ticket TECH-024. Mise à
+        jour nécessaire (pas une régression) : ce test affirmait
+        littéralement l'absence de modèle RH, dépassée par conception
+        depuis TECH-030 — la garantie réelle (documents.v1 fonctionne
+        de façon autonome) reste vérifiée ci-dessous."""
         from django.apps import apps
 
         rh_app = apps.get_app_config("rh")
-        assert list(rh_app.get_models()) == []
+        assert {m.__name__ for m in rh_app.get_models()} == {
+            "Employee",
+            "Contract",
+            "LeaveRequest",
+            "EmployeeDocument",
+        }
 
-        # La façade documents.v1 fonctionne malgré tout intégralement.
+        # La façade documents.v1 fonctionne malgré tout intégralement,
+        # sans appeler aucun code RH.
         document_ref = attach(content=b"x", filename="x.pdf", owner_user=owner)
         assert get(document_ref, owner).document_ref == document_ref
