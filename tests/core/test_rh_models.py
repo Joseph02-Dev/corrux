@@ -39,6 +39,19 @@ class TestValidCreation:
         assert employee.pk is not None
         assert employee.user is None
 
+    def test_email_defaults_to_empty_string(self):
+        employee = Employee.objects.create(
+            first_name="X", last_name="Y", position="Z", hire_date=date(2026, 1, 1)
+        )
+        assert employee.email == ""
+
+    def test_email_can_be_set_explicitly(self):
+        employee = Employee.objects.create(
+            first_name="X", last_name="Y", position="Z", hire_date=date(2026, 1, 1),
+            email="employe@example.com",
+        )
+        assert employee.email == "employe@example.com"
+
     def test_create_valid_employee_with_user_account(self, db):
         user = User.objects.create(username="lie_employe", password_hash="x", full_name="Lié")
         employee = Employee.objects.create(
@@ -264,14 +277,19 @@ class TestSchema:
 
         assert not any("documentation" in name for name in imported_modules)
 
-    def test_no_field_beyond_those_specified_by_architecture(self, employee):
+    def test_no_field_beyond_those_specified_by_architecture_or_confirmed_decisions(
+        self, employee
+    ):
         """Aucun timestamp/statut de contrat/champ non spécifié n'a été
         ajouté — vérifié sur les champs réellement présents de chaque
-        modèle."""
+        modèle. `email` est désormais attendu (décision produit
+        confirmée, TECH-031) : mise à jour nécessaire de ce test, pas
+        une régression — même situation que documentation/test_smoke.py
+        en TECH-020/030 lorsqu'un champ est ajouté par conception."""
         employee_fields = {f.name for f in Employee._meta.get_fields()}
         assert employee_fields == {
-            "id", "user", "first_name", "last_name", "position", "hire_date", "status",
-            "contracts", "leave_requests", "employee_documents",
+            "id", "user", "first_name", "last_name", "email", "position",
+            "hire_date", "status", "contracts", "leave_requests", "employee_documents",
         }
 
         contract_fields = {f.name for f in Contract._meta.get_fields()}

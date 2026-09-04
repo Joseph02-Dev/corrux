@@ -51,6 +51,18 @@ schéma rh (§7)") ; l'écart avec la maquette reste à trancher par le
 ticket qui implémentera réellement la gestion des contrats (TECH-032),
 pas ici.
 
+Décision produit confirmée (TECH-031, postérieure à la pose initiale de
+ce schéma par TECH-030) : `Employee.email` a été ajouté après coup,
+hors §7 littéral. Écart trouvé lors de l'audit Phase 1 de TECH-031 —
+son propre texte ("nom, email, poste, date d'entrée, statut") et
+maquettes-ui-v1-lot4.md (Drawer employé : "Nom, Email, Poste, Date
+d'entrée") convergent tous deux, indépendamment, sur ce champ manquant
+de §7. Portée volontairement étroite : uniquement `email` (optionnel,
+aucune source n'impose son caractère obligatoire) ; `first_name`/
+`last_name` restent inchangés — le "Nom" unique mentionné par ces deux
+sources reste une combinaison à l'affichage (TECH-031), pas une fusion
+de champs en base.
+
 Contract.end_date et Contract.document_ref : nullables — un contrat
 peut être à durée indéterminée (maquette : "Date de fin (si
 applicable)") et un contrat peut être créé avant qu'un document ne lui
@@ -82,6 +94,13 @@ class Employee(models.Model):
     )
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
+    # Décision confirmée (hors §7 littéral, TECH-031 + maquette Lot 4
+    # convergent tous deux sur ce champ manquant) : TECH-030 avait posé
+    # le schéma exactement conforme à §7, sans email — écart signalé
+    # explicitement lors de l'audit TECH-031, tranché par décision
+    # produit avant cette migration, pas une invention silencieuse.
+    # Optionnel : aucune source n'impose son caractère obligatoire.
+    email = models.EmailField(blank=True, default="")
     position = models.CharField(max_length=255)
     hire_date = models.DateField()
     status = models.CharField(
