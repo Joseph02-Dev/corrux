@@ -1,0 +1,16 @@
+{% load ui_tags %}
+{% comment %}
+En-tête de fiche personnelle — UI-402. Générique, réutilisable pour
+toute fiche personnelle future (maquette Lot 4 §2).
+{% endcomment %}
+<div class="corrux-record-header">
+  <span class="corrux-record-header__avatar" aria-hidden="true">{{ initial }}</span>
+  <div class="corrux-record-header__info">
+    <h1 class="corrux-h1">{{ name }}</h1>
+    <p class="corrux-record-header__subtitle">{{ subtitle }}</p>
+  </div>
+  {% corrux_badge label=status_label tone=status_tone %}
+  {% if edit_url %}
+    {% corrux_button label="Modifier" variant="secondary" href=edit_url %}
+  {% endif %}
+</div>

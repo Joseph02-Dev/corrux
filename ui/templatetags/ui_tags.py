@@ -543,3 +543,44 @@ def corrux_inline_action_form(hidden_fields, action_url, label, variant="seconda
         "label": label,
         "variant": variant,
     }
+
+
+@register.inclusion_tag("ui/components/record_header.html")
+def corrux_record_header(name, subtitle, status_label, status_tone, edit_url=""):
+    """En-tête de fiche personnelle — UI-402.
+
+    Nouveau composant explicitement générique (maquette Lot 4 §2 :
+    « réutilisable pour toute fiche personnelle »), pas seulement pour
+    Employee — un futur module (ex. fiche fournisseur) pourrait le
+    réutiliser sans modification. Avatar = initiale, même patron
+    visuel déjà établi par corrux_user_menu (shell.css
+    .corrux-user-menu__avatar), sous un nom de classe générique, pas
+    dupliqué depuis zéro.
+
+    `edit_url` vide = pas de bouton Modifier affiché (ex. utilisateur
+    sans permission d'écriture) — jamais un bouton désactivé menant
+    nulle part."""
+    initial = name[0].upper() if name else "?"
+    return {
+        "initial": initial,
+        "name": name,
+        "subtitle": subtitle,
+        "status_label": status_label,
+        "status_tone": status_tone,
+        "edit_url": edit_url,
+    }
+
+
+@register.inclusion_tag("ui/components/record_tabs.html")
+def corrux_record_tabs(tabs, active_tab):
+    """Barre d'onglets d'une fiche personnelle — UI-402.
+
+    `tabs` : liste de tuples (label, url_ou_vide, clé). Un onglet sans
+    url (chaîne vide) est rendu non cliquable (texte simple) — jamais
+    un lien mort vers un écran qui n'existe pas encore (Documents/
+    Contrats/Congés restent non cliquables tant que UI-403/404/405 ne
+    sont pas construits). Même patron déjà établi pour Utilisateurs &
+    rôles (UI-201/202, `.corrux-tabs`), généralisé ici pour être
+    réutilisé sans duplication par UI-403/404/405 (critère
+    d'acceptation explicite du ticket)."""
+    return {"tabs": tabs, "active_tab": active_tab}

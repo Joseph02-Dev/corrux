@@ -596,6 +596,45 @@ a.corrux-button {
   color: var(--corrux-color-text-muted);
 }
 
+/* --- En-tête de fiche personnelle (UI-402) ----------------------------- */
+/* Composant générique — réutilisable pour toute fiche personnelle
+   future, pas seulement Employee (maquette Lot 4 §2). */
+
+.corrux-record-header {
+  display: flex;
+  align-items: center;
+  gap: var(--corrux-space-3);
+  margin-bottom: var(--corrux-space-4);
+}
+
+.corrux-record-header__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: var(--corrux-radius-full);
+  background-color: var(--corrux-color-primary);
+  color: var(--corrux-color-text-on-primary);
+  font-size: var(--corrux-font-size-h2);
+  font-weight: var(--corrux-font-weight-bold);
+}
+
+.corrux-record-header__info {
+  flex: 1;
+}
+
+.corrux-record-header__info .corrux-h1 {
+  margin-bottom: 0;
+}
+
+.corrux-record-header__subtitle {
+  margin: 0;
+  color: var(--corrux-color-text-secondary);
+  font-size: var(--corrux-font-size-small);
+}
+
 /* --- Table générique (UI-201) -------------------------------------------
    Réutilisable telle quelle par UI-205/UI-206. */
 

@@ -1,0 +1,33 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}{% if employee %}{{ employee.first_name }} {{ employee.last_name }} — {% endif %}CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    {{ header_html|safe }}
+    {{ tabs_html|safe }}
+
+    <dl class="corrux-definition-list">
+      <dt>Prénom</dt>
+      <dd>{{ employee.first_name }}</dd>
+
+      <dt>Nom</dt>
+      <dd>{{ employee.last_name }}</dd>
+
+      <dt>Email</dt>
+      <dd>{{ employee.email|default:"—" }}</dd>
+
+      <dt>Poste</dt>
+      <dd>{{ employee.position }}</dd>
+
+      <dt>Date d'entrée</dt>
+      <dd>{{ employee.hire_date|date:"d/m/Y" }}</dd>
+
+      <dt>Statut</dt>
+      <dd>{{ employee.get_status_display }}</dd>
+    </dl>
+  {% endif %}
+{% endblock %}

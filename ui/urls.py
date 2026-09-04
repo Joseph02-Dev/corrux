@@ -108,4 +108,5 @@ urlpatterns = [
         views.employee_deactivate,
         name="ui-employee-deactivate",
     ),
+    path("employes/<int:employee_id>/", views.employee_detail, name="ui-employee-detail"),
 ]

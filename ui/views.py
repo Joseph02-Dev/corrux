@@ -2505,3 +2505,87 @@ def employee_deactivate(request, employee_id):
         target=employee_full_name(employee), metadata={},
     )
     return HttpResponseRedirect(reverse("ui-employee-list"))
+
+
+# ============================================================================
+# UI-402 — Fiche employé : en-tête + onglet Informations
+# ============================================================================
+#
+# En-tête et barre d'onglets construits comme des fonctions partagées
+# (_employee_record_header/_employee_record_tabs) — critère
+# d'acceptation explicite du ticket : réutilisables sans duplication
+# par UI-403/404/405, mêmes composants génériques
+# (corrux_record_header/corrux_record_tabs) qu'eux.
+#
+# Permission (décision documentée) : rh.employee.read uniquement — pas
+# de mécanisme d'auto-accès à sa propre fiche. La maquette mentionne
+# « Employé (accès à sa propre fiche, en lecture, selon permission) »,
+# mais aucune permission d'objet n'existe nulle part pour RH
+# (contrairement à Documentation, TECH-023) ; interprété comme : le
+# rôle Employé se voit accorder rh.employee.read via la matrice de
+# permissions (UI-202), pas un nouveau mécanisme de bypass à inventer
+# ici sans mandat clair. Signalé, pas résolu silencieusement.
+#
+# Onglets Documents/Contrats/Congés : non cliquables (aucune url) tant
+# que UI-403/404/405 ne sont pas construits — jamais un lien mort.
+
+
+def _employee_record_tabs(employee, active_tab):
+    """Barre d'onglets partagée — réutilisée telle quelle par
+    UI-403/404/405 (critère d'acceptation explicite)."""
+    tabs = [
+        ("Informations", reverse("ui-employee-detail", args=[employee.id]), "informations"),
+        ("Documents", "", "documents"),
+        ("Contrats", "", "contrats"),
+        ("Congés", "", "conges"),
+    ]
+    return _component_html(
+        "ui/components/record_tabs.html", ui_tags.corrux_record_tabs,
+        tabs=tabs, active_tab=active_tab,
+    )
+
+
+def _employee_record_header(employee, can_edit):
+    """En-tête partagé — réutilisé tel quel par UI-403/404/405 (critère
+    d'acceptation explicite).
+
+    « bouton Modifier → UI-401 Variante B » (comportement attendu
+    explicite du ticket) : réutilise directement la route d'édition
+    déjà construite par UI-401 (elle rend la liste employés avec le
+    Drawer d'édition de cet employé déjà ouvert) — jamais une seconde
+    route "standalone" inventée pour ce ticket."""
+    status_tone = "success" if employee.status == Employee.Status.ACTIVE else "neutral"
+    edit_url = reverse("ui-employee-edit", args=[employee.id]) if can_edit else ""
+    return _component_html(
+        "ui/components/record_header.html", ui_tags.corrux_record_header,
+        name=employee_full_name(employee), subtitle=employee.position,
+        status_label=employee.get_status_display(), status_tone=status_tone,
+        edit_url=edit_url,
+    )
+
+
+@require_GET
+def employee_detail(request, employee_id):
+    """Fiche employé — onglet Informations, lecture seule — UI-402."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(
+            f"{login_url}?next={reverse('ui-employee-detail', args=[employee_id])}"
+        )
+
+    employee = get_object_or_404(Employee, pk=employee_id)
+
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.employee.read"
+    ):
+        return render(
+            request, "ui/employees/detail.html", {"permission_denied": True}, status=403
+        )
+
+    can_edit = has_permission(request.corrux_user, "rh.employee.write")
+    context = {
+        "header_html": _employee_record_header(employee, can_edit),
+        "tabs_html": _employee_record_tabs(employee, "informations"),
+        "employee": employee,
+    }
+    return render(request, "ui/employees/detail.html", context)

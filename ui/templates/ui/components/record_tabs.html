@@ -1,0 +1,16 @@
+{% comment %}
+Barre d'onglets d'une fiche personnelle — UI-402. Un onglet sans url
+(chaîne vide dans le tuple) est rendu non cliquable — jamais un lien
+mort vers un écran qui n'existe pas encore.
+{% endcomment %}
+<div class="corrux-tabs" role="tablist" aria-label="Sections de la fiche">
+  {% for label, url, key in tabs %}
+    {% if key == active_tab %}
+      <span class="corrux-tabs__tab" role="tab" aria-selected="true">{{ label }}</span>
+    {% elif url %}
+      <a href="{{ url }}" class="corrux-tabs__tab" role="tab" aria-selected="false">{{ label }}</a>
+    {% else %}
+      <span class="corrux-tabs__tab" role="tab" aria-disabled="true">{{ label }}</span>
+    {% endif %}
+  {% endfor %}
+</div>
