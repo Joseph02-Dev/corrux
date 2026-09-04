@@ -313,3 +313,10 @@ class TestSecurity:
         client = _authenticated_client(other_user)
         response = client.put(_edit_url(document.id))
         assert response.status_code == 405
+
+    def test_post_is_rejected_on_consultation(self, document, owner):
+        """Bug corrigé (audit général) : document_detail n'avait aucune
+        restriction de méthode — un POST était traité comme un GET."""
+        client = _authenticated_client(owner)
+        response = client.post(_detail_url(document.id))
+        assert response.status_code == 405

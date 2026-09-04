@@ -102,6 +102,13 @@ class TestRoleList:
         assert response.status_code == 302
         assert response.url == f"/login/?next={ROLE_LIST_URL}"
 
+    def test_post_is_rejected(self, basic_user):
+        """Bug corrigé (audit général) : role_list n'avait aucune
+        restriction de méthode — un POST était traité comme un GET."""
+        client = _authenticated_client(basic_user)
+        response = client.post(ROLE_LIST_URL)
+        assert response.status_code == 405
+
     def test_four_predefined_roles_are_displayed(self, basic_user, predefined_roles):
         client = _authenticated_client(basic_user)
         content = client.get(ROLE_LIST_URL).content.decode()
@@ -150,6 +157,13 @@ class TestMatrixAccess:
         client = Client()
         response = client.get(ROLE_MATRIX_URL)
         assert response.status_code == 302
+
+    def test_post_is_rejected(self, admin_user):
+        """Bug corrigé (audit général) : role_matrix n'avait aucune
+        restriction de méthode — un POST était traité comme un GET."""
+        client = _authenticated_client(admin_user)
+        response = client.post(ROLE_MATRIX_URL)
+        assert response.status_code == 405
 
 
 # --- C. Matrice — contenu ---------------------------------------------------------

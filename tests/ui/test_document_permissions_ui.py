@@ -398,6 +398,20 @@ class TestSecurity:
         response = client.get(_document_toggle_url(document.id))
         assert response.status_code == 405
 
+    def test_document_permissions_view_rejects_post(self, document, manager):
+        """Bug corrigé (audit général) : document_permissions n'avait
+        aucune restriction de méthode — un POST était traité comme un
+        GET."""
+        client = _authenticated_client(manager)
+        response = client.post(_document_permissions_url(document.id))
+        assert response.status_code == 405
+
+    def test_folder_permissions_view_rejects_post(self, folder, manager):
+        """Même bug corrigé, pour la variante dossier."""
+        client = _authenticated_client(manager)
+        response = client.post(_folder_permissions_url(folder.id))
+        assert response.status_code == 405
+
     def test_grantee_full_name_is_html_escaped(
         self, documentation_activated, storage_root, owner, manager
     ):

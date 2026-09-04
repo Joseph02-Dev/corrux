@@ -204,6 +204,13 @@ class TestRealList:
         assert "Trouvable Personne" in content
         assert "Autre Personne" not in content
 
+    def test_post_is_rejected(self, writer):
+        """Bug corrigé (audit général) : user_list n'avait aucune
+        restriction de méthode — un POST était traité comme un GET."""
+        client = _authenticated_client(writer)
+        response = client.post(LIST_URL)
+        assert response.status_code == 405
+
 
 # --- C. Création ---------------------------------------------------------------
 
@@ -379,6 +386,15 @@ class TestEdit:
 
         edit_block = content.split(f'id="edit-user-{target.id}"')[1].split("</dialog>")[0]
         assert 'type="password"' not in edit_block
+
+    def test_put_is_rejected(self, writer):
+        """Bug corrigé (audit général) : user_edit ne rejetait aucune
+        méthode autre que GET/POST — un PUT rendait silencieusement le
+        formulaire au lieu d'être refusé."""
+        target = User.objects.create(username="putreject", full_name="X")
+        client = _authenticated_client(writer)
+        response = client.put(_edit_url(target.id))
+        assert response.status_code == 405
 
 
 # --- E. Réinitialisation -------------------------------------------------------

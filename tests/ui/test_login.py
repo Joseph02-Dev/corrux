@@ -83,6 +83,49 @@ class TestGetLogin:
         assert "{#" not in content
         assert "{% comment %}" not in content
 
+    def test_put_method_is_rejected(self):
+        """Bug corrigé (audit général) : login_page ne rejetait aucune
+        méthode HTTP en dehors de GET/POST — un PUT tombait
+        silencieusement dans la branche de rendu GET au lieu d'être
+        refusé. Vérifie le comportement HTTP réel de la vue elle-même
+        (pas la présence d'un décorateur) : GET et POST restent
+        volontairement acceptés (vue à double usage), toute autre
+        méthode doit être rejetée.
+
+        Client sans application stricte du CSRF (contrairement à
+        _client()) : isole précisément le comportement de la vue
+        elle-même — le middleware CSRF de Django rejette de toute façon
+        indépendamment un PUT sans jeton (403, avant même d'atteindre
+        la vue), ce qui est une protection distincte et légitime,
+        déjà couverte par TestCsrfProtection ci-dessous, pas ce que ce
+        test vérifie ici."""
+        client = Client()
+        response = client.put(LOGIN_URL)
+        assert response.status_code == 405
+
+    def test_put_method_creates_no_session_and_no_audit_event(self, active_user):
+        """Une méthode refusée ne doit déclencher aucun effet de bord —
+        ni session ouverte, ni événement d'audit, contrairement à un
+        POST de connexion réussi."""
+        client = Client()
+        audit_count_before = AuditLog.objects.count()
+
+        client.put(LOGIN_URL)
+
+        assert auth.SESSION_USER_ID_KEY not in client.session
+        assert AuditLog.objects.count() == audit_count_before
+
+    def test_get_and_post_remain_functional_after_the_fix(self, active_user):
+        """Garde-fou explicite : le correctif HTTP ne doit pas casser
+        le comportement GET+POST volontaire de cette vue à double
+        usage."""
+        client = _client()
+        assert client.get(LOGIN_URL).status_code == 200
+
+        response = _post_login(client, active_user.username, PASSWORD)
+        assert response.status_code == 302
+        assert auth.SESSION_USER_ID_KEY in client.session
+
 
 @pytest.mark.django_db
 class TestCsrfProtection:

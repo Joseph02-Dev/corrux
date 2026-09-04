@@ -105,6 +105,9 @@ def login_page(request):
     """
     next_param = request.POST.get("next") or request.GET.get("next", "")
 
+    if request.method not in ("GET", "HEAD", "POST"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
     if request.corrux_user is not None:
         return HttpResponseRedirect(_safe_redirect_target(request, next_param))
 
@@ -133,6 +136,7 @@ def login_page(request):
     )
 
 
+@require_GET
 def profile_page(request):
     """Mon profil (UI-105) — infos du compte connecté, lecture seule.
 
@@ -443,6 +447,7 @@ def _render_user_list_page(
 # --- Vues ------------------------------------------------------------------
 
 
+@require_GET
 def user_list(request):
     """Liste des utilisateurs — UI-201.
 
@@ -536,6 +541,9 @@ def user_create(request):
 @require_permission("core.user.write")
 def user_edit(request, user_id):
     user = get_object_or_404(User, pk=user_id)
+
+    if request.method not in ("GET", "HEAD", "POST"):
+        return HttpResponseNotAllowed(["GET", "POST"])
 
     if request.method != "POST":
         return _render_user_list_page(request, open_drawer_id=f"edit-user-{user.id}")
@@ -759,6 +767,7 @@ def _render_module_list_page(
     return render(request, "ui/modules/list.html", context, status=http_status)
 
 
+@require_GET
 def module_list(request):
     """Catalogue des modules — UI-203.
 
@@ -1154,6 +1163,7 @@ def _predefined_roles_ordered():
     return [roles_by_name[name] for name in _PREDEFINED_ROLE_NAMES if name in roles_by_name]
 
 
+@require_GET
 def role_list(request):
     """Liste des 4 rôles prédéfinis — même permission que UI-201
     (core.user.read), c'est le même écran, un autre onglet. Réutilise
@@ -1198,6 +1208,7 @@ def role_list(request):
     return render(request, "ui/users/roles_list.html", context)
 
 
+@require_GET
 def role_matrix(request):
     """Matrice module × ressource × action — réservée à core.role.write.
 
@@ -1621,6 +1632,7 @@ def _document_detail_drawer_html(document, edit_url, can_edit):
     )
 
 
+@require_GET
 def document_detail(request, document_id):
     """Variante A — consultation, lecture seule."""
     if request.corrux_user is None:
@@ -1844,6 +1856,7 @@ def _resolve_grantee(raw_value):
     return None, None
 
 
+@require_GET
 def document_permissions(request, document_id):
     if request.corrux_user is None:
         login_url = reverse("ui-login")
@@ -1953,6 +1966,7 @@ def document_permissions_add(request, document_id):
     return HttpResponseRedirect(reverse("ui-document-permissions", args=[document.id]))
 
 
+@require_GET
 def folder_permissions(request, folder_id):
     if request.corrux_user is None:
         login_url = reverse("ui-login")

@@ -146,6 +146,13 @@ class TestProfilePage:
         assert "jdupont" in content
         assert "Jean Dupont" in content
 
+    def test_post_is_rejected(self, active_user):
+        """Bug corrigé (audit général) : profile_page n'avait aucune
+        restriction de méthode — un POST était traité comme un GET."""
+        client = _authenticated_client(active_user)
+        response = client.post(PROFILE_URL)
+        assert response.status_code == 405
+
     def test_shows_active_status_badge(self, active_user):
         client = _authenticated_client(active_user)
         content = client.get(PROFILE_URL).content.decode()

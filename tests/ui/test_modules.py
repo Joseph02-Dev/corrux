@@ -192,6 +192,13 @@ class TestCatalogue:
         assert "corrux-empty-state" in content
         assert "corrux-table" not in content
 
+    def test_post_is_rejected(self, reader):
+        """Bug corrigé (audit général) : module_list n'avait aucune
+        restriction de méthode — un POST était traité comme un GET."""
+        client = _authenticated_client(reader)
+        response = client.post(LIST_URL)
+        assert response.status_code == 405
+
     def test_real_modules_are_loaded_from_database(self, reader, actor):
         install_module(parse_manifest_text(DOCUMENTATION_MANIFEST_YAML), actor=actor)
         client = _authenticated_client(reader)
