@@ -70,6 +70,7 @@ class TestValidCreation:
         assert contract.pk is not None
         assert contract.end_date is None
         assert contract.document_ref is None
+        assert contract.status == Contract.Status.ACTIVE
 
     def test_create_valid_contract_with_document_ref(self, employee):
         contract = Contract.objects.create(
@@ -280,12 +281,13 @@ class TestSchema:
     def test_no_field_beyond_those_specified_by_architecture_or_confirmed_decisions(
         self, employee
     ):
-        """Aucun timestamp/statut de contrat/champ non spécifié n'a été
-        ajouté — vérifié sur les champs réellement présents de chaque
-        modèle. `email` est désormais attendu (décision produit
-        confirmée, TECH-031) : mise à jour nécessaire de ce test, pas
-        une régression — même situation que documentation/test_smoke.py
-        en TECH-020/030 lorsqu'un champ est ajouté par conception."""
+        """Aucun timestamp/champ non spécifié n'a été ajouté — vérifié
+        sur les champs réellement présents de chaque modèle. `email`
+        (Employee) et `status` (Contract) sont désormais attendus
+        (décisions produit confirmées, TECH-031/TECH-032) : mise à jour
+        nécessaire de ce test, pas une régression — même situation que
+        documentation/test_smoke.py en TECH-020/030 lorsqu'un champ est
+        ajouté par conception."""
         employee_fields = {f.name for f in Employee._meta.get_fields()}
         assert employee_fields == {
             "id", "user", "first_name", "last_name", "email", "position",
@@ -294,5 +296,5 @@ class TestSchema:
 
         contract_fields = {f.name for f in Contract._meta.get_fields()}
         assert contract_fields == {
-            "id", "employee", "type", "start_date", "end_date", "document_ref",
+            "id", "employee", "type", "start_date", "end_date", "status", "document_ref",
         }

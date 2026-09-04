@@ -42,14 +42,18 @@ déjà établis dans le projet :
   core.audit_log.actor_user, TECH-008 : une trace de qui a approuvé/
   refusé une demande ne doit jamais disparaître silencieusement).
 
-Écart signalé, pas résolu silencieusement : maquettes-ui-v1-lot4.md
-(Drawer Contrat) liste un champ "Statut" pour les contrats, absent du
-schéma `contracts` de §7 (id, employee_id, type, start_date, end_date,
-document_ref — aucun statut). Ce ticket pose le schéma exactement tel
-que défini par §7, source normative explicite de TECH-030 ("poser le
-schéma rh (§7)") ; l'écart avec la maquette reste à trancher par le
-ticket qui implémentera réellement la gestion des contrats (TECH-032),
-pas ici.
+Écart résolu par décision produit confirmée (TECH-032, pas une
+invention silencieuse) : maquettes-ui-v1-lot4.md (Drawer Contrat) et le
+texte même de TECH-032 ("création/édition (type, début, fin si
+applicable, statut)") listent tous deux un champ "Statut" pour les
+contrats, absent du schéma `contracts` de §7 (id, employee_id, type,
+start_date, end_date, document_ref — aucun statut à l'origine, posé
+ainsi par TECH-030 qui suivait §7 littéralement, source normative
+explicite à l'époque). Contrairement à LeaveRequest.status (valeurs
+imposées littéralement par §7), aucune source n'énumère de valeurs
+possibles pour Contract.status — ajouté par TECH-032 avec 3 valeurs
+proposées et validées explicitement avant implémentation (Option A),
+cf. Contract.Status ci-dessous.
 
 Décision produit confirmée (TECH-031, postérieure à la pose initiale de
 ce schéma par TECH-030) : `Employee.email` a été ajouté après coup,
@@ -118,12 +122,29 @@ class Employee(models.Model):
 
 
 class Contract(models.Model):
+    class Status(models.TextChoices):
+        """Décision produit confirmée (TECH-032, audit Phase 1) : aucune
+        valeur n'est énumérée par §7 ni par aucune autre source pour ce
+        champ (contrairement à LeaveRequest.status, explicitement
+        énuméré par §7) — ces 3 valeurs sont ma proposition, validée
+        explicitement avant implémentation (Option A), pas une
+        invention silencieuse. Même convention que Employee.Status/
+        LeaveRequest.Status : valeurs ASCII anglaises, libellés
+        français."""
+
+        ACTIVE = "active", "Actif"
+        EXPIRED = "expired", "Expiré"
+        TERMINATED = "terminated", "Rompu"
+
     employee = models.ForeignKey(
         Employee, on_delete=models.PROTECT, related_name="contracts"
     )
     type = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.ACTIVE
+    )
     # Référence opaque documents.v1 (Document.id) — jamais une
     # ForeignKey vers modules.documentation.models.Document, cf.
     # contrainte architecturale en tête de fichier.

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from modules.rh.models import Employee
+from modules.rh.models import Contract, Employee
 
 
 def create_employee(
@@ -105,3 +105,83 @@ def employee_full_name(employee: Employee) -> str:
     documentée dans `modules/rh/models.py`.
     """
     return f"{employee.first_name} {employee.last_name}"
+
+
+# ============================================================================
+# TECH-032 — Gestion des contrats
+# ============================================================================
+#
+# Critère d'acceptation explicite : « aucun stockage fichier propre à
+# RH pour les contrats » (§8 architecture). Ce module n'importe jamais
+# `core.storage` — `document_ref` est une référence opaque déjà
+# obtenue via `modules.documentation.documents_v1.attach()`/`get()`
+# (TECH-024), jamais orchestrée ici : le document est sélectionné/
+# déposé via l'Explorateur Documentation (maquette Lot 4, Drawer
+# Contrat : « Lier un document » ouvre l'Explorateur, pas un champ
+# d'upload direct sur ce formulaire).
+#
+# Dépendance déclarée du ticket (TECH-034) non requise en pratique :
+# TECH-032 dépend littéralement de TECH-034 selon le plan, mais l'ordre
+# d'exécution recommandé du même document place TECH-032 avant
+# TECH-034 — incohérence interne signalée lors de l'audit Phase 1, pas
+# ignorée. Résolu sans blocage : le besoin réel de TECH-032
+# (document_ref obtenu via documents.v1) est déjà entièrement couvert
+# par TECH-024, disponible et testé ; TECH-034 n'ajoutera que la
+# liaison côté fiche employé (EmployeeDocument), une capacité que
+# TECH-032 n'utilise pas directement.
+
+
+def create_contract(
+    *,
+    employee: Employee,
+    type: str,
+    start_date: date,
+    end_date: date | None = None,
+    status: str = Contract.Status.ACTIVE,
+    document_ref: int | None = None,
+) -> Contract:
+    """Crée un contrat."""
+    return Contract.objects.create(
+        employee=employee,
+        type=type,
+        start_date=start_date,
+        end_date=end_date,
+        status=status,
+        document_ref=document_ref,
+    )
+
+
+def update_contract(
+    *,
+    contract: Contract,
+    type: str,
+    start_date: date,
+    end_date: date | None,
+    status: str,
+    document_ref: int | None,
+) -> Contract:
+    """Modifie un contrat.
+
+    `status` requis explicitement (même justification que
+    `update_employee`) : évite qu'un appel omettant ce paramètre ne
+    réinitialise silencieusement un statut déjà changé.
+    """
+    contract.type = type
+    contract.start_date = start_date
+    contract.end_date = end_date
+    contract.status = status
+    contract.document_ref = document_ref
+    contract.save(
+        update_fields=["type", "start_date", "end_date", "status", "document_ref"]
+    )
+    return contract
+
+
+def link_document_to_contract(*, contract: Contract, document_ref: int) -> Contract:
+    """Lie un document déjà déposé/sélectionné (via l'Explorateur
+    Documentation) à un contrat existant — action séparée de l'édition
+    complète (maquette : « Lier un document » comme action dédiée,
+    distincte des autres champs du Drawer Contrat)."""
+    contract.document_ref = document_ref
+    contract.save(update_fields=["document_ref"])
+    return contract
