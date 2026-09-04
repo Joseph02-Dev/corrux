@@ -159,4 +159,10 @@ urlpatterns = [
         views.employee_contract_edit,
         name="ui-employee-contract-edit",
     ),
+    path("employes/<int:employee_id>/conges/", views.employee_leave_tab, name="ui-employee-leave"),
+    path(
+        "employes/<int:employee_id>/conges/nouveau/",
+        views.employee_leave_request_create,
+        name="ui-employee-leave-create",
+    ),
 ]

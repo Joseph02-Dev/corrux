@@ -57,10 +57,12 @@ from modules.rh.services import (
     attach_document_to_employee,
     create_contract,
     create_employee,
+    create_leave_request,
     deactivate_employee,
     employee_full_name,
     link_document_to_contract,
     list_employee_documents,
+    list_leave_requests_for_employee,
     update_contract,
     update_employee,
 )
@@ -2543,7 +2545,7 @@ def _employee_record_tabs(employee, active_tab):
         ("Informations", reverse("ui-employee-detail", args=[employee.id]), "informations"),
         ("Documents", reverse("ui-employee-documents", args=[employee.id]), "documents"),
         ("Contrats", reverse("ui-employee-contracts", args=[employee.id]), "contrats"),
-        ("Congés", "", "conges"),
+        ("Congés", reverse("ui-employee-leave", args=[employee.id]), "conges"),
     ]
     return _component_html(
         "ui/components/record_tabs.html", ui_tags.corrux_record_tabs,
@@ -3264,3 +3266,179 @@ def employee_contract_edit(request, employee_id, contract_id):
         target=employee_full_name(employee), metadata={"type": contract_type},
     )
     return HttpResponseRedirect(reverse("ui-employee-contracts", args=[employee.id]))
+
+
+# ============================================================================
+# UI-405 — Fiche employé : onglet Congés + Drawer demande de congé
+# ============================================================================
+#
+# Granularité correcte dès le départ (leçon d'UI-404, corrigée juste
+# avant ce ticket) : rh.employee.read (accès à la fiche) PUIS
+# rh.leave_request.read séparément pour le contenu de CET onglet
+# précis — même patron à deux niveaux que UI-403/404.
+# rh.leave_request.write pour créer une demande — pas rh.employee.write.
+#
+# « Drawer de création sans champ de solde » (décision Lot 4 finale
+# #3) : create_leave_request() (TECH-033) n'a d'ailleurs aucun
+# paramètre de solde — rien à omettre volontairement, la contrainte
+# est déjà respectée par construction.
+#
+# Colonne "Commentaire du valideur" ajoutée en plus des 5 colonnes
+# listées par la maquette (Type/Début/Fin/Commentaire/Statut) : critère
+# d'acceptation explicite de TECH-033 lui-même ("refus exige un
+# commentaire du valideur, visible par l'employé") — omis de la liste
+# de colonnes de la maquette mais requis par le contrat du ticket
+# backend dont dépend celui-ci, pas une invention.
+#
+# Critère d'acceptation explicite de CE ticket : « une demande créée
+# apparaît en Attente ici ET dans UI-406 » — UI-406 (file d'attente du
+# valideur) n'existe pas encore (ticket suivant). Vérifié ici via
+# list_pending_leave_requests() (TECH-033, déjà construite et testée)
+# directement — le mécanisme réel que UI-406 utilisera pour son propre
+# rendu, sans anticiper la construction de cet écran.
+
+
+def _leave_request_table_rows(leave_requests):
+    rows = []
+    for leave in leave_requests:
+        rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    leave.type,
+                    leave.start_date.strftime("%d/%m/%Y"),
+                    leave.end_date.strftime("%d/%m/%Y"),
+                    leave.comment or "—",
+                    leave.get_status_display(),
+                    leave.approver_comment or "—",
+                ),
+            )
+        )
+    return rows
+
+
+def _leave_request_create_drawer_content(errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    return "".join(
+        [
+            _field_html(
+                label="Type", name="type", field_id="id_create_leave_type",
+                value=values.get("type", ""), required=True, error=errors.get("type", ""),
+            ),
+            _field_html(
+                label="Date de début", name="start_date", field_id="id_create_leave_start",
+                input_type="date", value=values.get("start_date", ""), required=True,
+                error=errors.get("start_date", ""),
+            ),
+            _field_html(
+                label="Date de fin", name="end_date", field_id="id_create_leave_end",
+                input_type="date", value=values.get("end_date", ""), required=True,
+                error=errors.get("end_date", ""),
+            ),
+            _field_html(
+                label="Commentaire (facultatif)", name="comment",
+                field_id="id_create_leave_comment", value=values.get("comment", ""),
+            ),
+        ]
+    )
+
+
+def _render_employee_leave_page(
+    request, employee, *, open_drawer_id="", create_errors=None, create_values=None,
+    http_status=200,
+):
+    leave_requests = list_leave_requests_for_employee(employee)
+    can_create = has_permission(request.corrux_user, "rh.leave_request.write")
+    can_edit_employee = has_permission(request.corrux_user, "rh.employee.write")
+
+    context = {
+        "header_html": _employee_record_header(employee, can_edit_employee),
+        "tabs_html": _employee_record_tabs(employee, "conges"),
+        "table_headers": [
+            "Type", "Début", "Fin", "Commentaire", "Statut", "Commentaire du valideur",
+        ],
+        "table_rows": _leave_request_table_rows(leave_requests) if leave_requests else [],
+        "leave_requests_empty": not leave_requests,
+        "can_create": can_create,
+        "create_drawer_content": _leave_request_create_drawer_content(
+            create_errors, create_values
+        ),
+        "create_url": reverse("ui-employee-leave-create", args=[employee.id]),
+        "create_drawer_open": open_drawer_id == "create-leave",
+    }
+    return render(request, "ui/employees/leave_tab.html", context, status=http_status)
+
+
+@require_GET
+def employee_leave_tab(request, employee_id):
+    """Onglet Congés — UI-405."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(
+            f"{login_url}?next={reverse('ui-employee-leave', args=[employee_id])}"
+        )
+
+    employee = get_object_or_404(Employee, pk=employee_id)
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.employee.read"
+    ):
+        return render(
+            request, "ui/employees/detail.html", {"permission_denied": True}, status=403
+        )
+
+    can_edit_employee = has_permission(request.corrux_user, "rh.employee.write")
+    if not has_permission(request.corrux_user, "rh.leave_request.read"):
+        context = {
+            "header_html": _employee_record_header(employee, can_edit_employee),
+            "tabs_html": _employee_record_tabs(employee, "conges"),
+            "tab_permission_denied": True,
+        }
+        return render(request, "ui/employees/leave_tab.html", context, status=403)
+
+    return _render_employee_leave_page(request, employee)
+
+
+@require_permission("rh.leave_request.write")
+@require_POST
+def employee_leave_request_create(request, employee_id):
+    employee = get_object_or_404(Employee, pk=employee_id)
+
+    leave_type = request.POST.get("type", "").strip()
+    start_date_raw = request.POST.get("start_date", "").strip()
+    end_date_raw = request.POST.get("end_date", "").strip()
+    comment = request.POST.get("comment", "").strip()
+
+    errors = {}
+    if not leave_type:
+        errors["type"] = "Ce champ est requis."
+    start_date_value = _parse_contract_date(start_date_raw)
+    if not start_date_raw:
+        errors["start_date"] = "Ce champ est requis."
+    elif start_date_value is None:
+        errors["start_date"] = "Date invalide."
+    end_date_value = _parse_contract_date(end_date_raw)
+    if not end_date_raw:
+        errors["end_date"] = "Ce champ est requis."
+    elif end_date_value is None:
+        errors["end_date"] = "Date invalide."
+
+    values = {
+        "type": leave_type, "start_date": start_date_raw, "end_date": end_date_raw,
+        "comment": comment,
+    }
+    if errors:
+        return _render_employee_leave_page(
+            request, employee, open_drawer_id="create-leave",
+            create_errors=errors, create_values=values, http_status=400,
+        )
+
+    create_leave_request(
+        employee=employee, type=leave_type, start_date=start_date_value,
+        end_date=end_date_value, comment=comment,
+    )
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.leave_request_create",
+        target=employee_full_name(employee), metadata={"type": leave_type},
+    )
+    return HttpResponseRedirect(reverse("ui-employee-leave", args=[employee.id]))

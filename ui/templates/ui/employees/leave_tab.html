@@ -1,0 +1,34 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Congés — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    {{ header_html|safe }}
+    {{ tabs_html|safe }}
+
+    {% if tab_permission_denied %}
+      {% corrux_permission_denied %}
+    {% else %}
+      {% if can_create %}
+        <div class="corrux-toolbar">
+          <span></span>
+          {% corrux_modal_trigger modal_id="create-leave" label="Nouvelle demande de congé" variant="primary" %}
+        </div>
+      {% endif %}
+
+      {% if leave_requests_empty %}
+        {% corrux_empty_state message="Aucune demande de congé pour cet employé." %}
+      {% else %}
+        {% corrux_table headers=table_headers rows=table_rows %}
+      {% endif %}
+
+      {% if can_create %}
+        {% corrux_drawer drawer_id="create-leave" title="Nouvelle demande de congé" action=create_url content=create_drawer_content submit_label="Envoyer" open=create_drawer_open %}
+      {% endif %}
+    {% endif %}
+  {% endif %}
+{% endblock %}
