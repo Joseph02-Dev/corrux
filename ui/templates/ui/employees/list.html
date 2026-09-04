@@ -1,0 +1,44 @@
+{% extends "ui/shell/base.html" %}
+{% load ui_tags %}
+
+{% block title %}Employés — CORRUX{% endblock %}
+
+{% block content %}
+  {% if permission_denied %}
+    {% corrux_permission_denied %}
+  {% else %}
+    <h1 class="corrux-h1">Employés</h1>
+
+    <div class="corrux-toolbar">
+      <form method="get" role="search" class="corrux-toolbar__search">
+        {% corrux_icon name="search" %}
+        <input
+          type="search"
+          name="q"
+          value="{{ search }}"
+          class="corrux-toolbar__search-input"
+          placeholder="Rechercher un employé"
+          aria-label="Rechercher un employé par nom"
+        >
+      </form>
+      <span class="corrux-toolbar__count">
+        {{ employee_count }} employé{{ employee_count|pluralize }}
+      </span>
+      {% if can_write %}
+        {% corrux_modal_trigger modal_id="create-employee" label="Nouvel employé" variant="primary" %}
+      {% endif %}
+    </div>
+
+    {% if employees_empty %}
+      {% corrux_empty_state message="Aucun employé ne correspond à cette recherche." %}
+    {% else %}
+      {% corrux_table headers=table_headers rows=table_rows %}
+    {% endif %}
+
+    {% if can_write %}
+      {% corrux_drawer drawer_id="create-employee" title="Nouvel employé" action=create_url content=create_drawer_content submit_label="Créer" open=create_drawer_open %}
+      {{ edit_drawers_html|safe }}
+      {{ deactivate_modals_html|safe }}
+    {% endif %}
+  {% endif %}
+{% endblock %}

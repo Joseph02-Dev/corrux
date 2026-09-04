@@ -96,4 +96,16 @@ urlpatterns = [
         name="ui-folder-permissions-add",
     ),
     path("documents/recherche/", views.document_search, name="ui-document-search"),
+    path("employes/", views.employee_list, name="ui-employee-list"),
+    path("employes/nouveau/", views.employee_create, name="ui-employee-create"),
+    path(
+        "employes/<int:employee_id>/modifier/",
+        views.employee_edit,
+        name="ui-employee-edit",
+    ),
+    path(
+        "employes/<int:employee_id>/desactiver/",
+        views.employee_deactivate,
+        name="ui-employee-deactivate",
+    ),
 ]

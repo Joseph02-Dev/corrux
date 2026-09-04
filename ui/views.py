@@ -7,7 +7,7 @@ core.identity/core.authz (TECH-002/003/008) comme unique autorité.
 """
 
 import secrets
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import PurePosixPath
 
 from django.db import IntegrityError, transaction
@@ -50,6 +50,13 @@ from modules.documentation.services import (
     search_documents,
     update_document,
     upload_document,
+)
+from modules.rh.models import Employee
+from modules.rh.services import (
+    create_employee,
+    deactivate_employee,
+    employee_full_name,
+    update_employee,
 )
 from ui.navigation import module_is_activated
 from ui.templatetags import ui_tags
@@ -2151,3 +2158,350 @@ def document_search(request):
         "folder_options": _search_folder_options(),
     }
     return render(request, "ui/documentation/search.html", context)
+
+
+# ============================================================================
+# UI-401 — Employés : liste + Drawer création/édition
+# ============================================================================
+#
+# Miroir structurel de UI-201 (Utilisateurs & rôles) — même patron
+# exact (liste + Drawer création/édition en 2 variantes + Modal de
+# désactivation), adapté aux champs Employee. Différences volontaires :
+# - Aucune logique de mot de passe/rôle (Employee n'a ni identifiant de
+#   connexion ni rôle propre).
+# - Toute mutation délègue aux fonctions de service déjà construites et
+#   testées par TECH-031 (create_employee/update_employee/
+#   deactivate_employee) — jamais une réimplémentation de la logique
+#   métier dans la vue (contrairement à user_edit, antérieur à
+#   l'existence d'une couche service RH).
+# - Permission : rh.employee.read/write (Option A, TECH-035) — pas
+#   rh.employe.lire/creer (maquette, français, déjà résolu autrement).
+# - Module RH doit être activé (comme les écrans Documentation
+#   activables) — vérifié explicitement, contrairement à UI-201 qui
+#   fait partie de Platform Core, jamais désactivable.
+#
+# Critère d'acceptation explicite : note affichée précisant qu'aucun
+# compte utilisateur n'est créé automatiquement — texte dans le Drawer
+# de création, cf. _employee_create_drawer_content().
+
+
+def _employee_table_rows(employees):
+    rows = []
+    for employee in employees:
+        actions = _modal_trigger_html(
+            modal_id=f"edit-employee-{employee.id}", label="Modifier", variant="secondary"
+        )
+        if employee.status == Employee.Status.ACTIVE:
+            actions += _modal_trigger_html(
+                modal_id=f"deactivate-employee-{employee.id}",
+                label="Marquer inactif",
+                variant="danger",
+            )
+        rows.append(
+            ui_tags.TableRow(
+                cells=(
+                    employee_full_name(employee),
+                    employee.position,
+                    employee.email or "—",
+                    employee.hire_date.strftime("%d/%m/%Y"),
+                    employee.get_status_display(),
+                ),
+                actions_html=actions,
+            )
+        )
+    return rows
+
+
+def _employee_create_drawer_content(errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    no_account_note = (
+        '<p class="corrux-text-small">Créer une fiche employé ne crée jamais '
+        "de compte utilisateur CORRUX — les deux restent des objets distincts. "
+        "Un compte peut être créé séparément depuis Utilisateurs & rôles si "
+        "nécessaire.</p>"
+    )
+    return no_account_note + "".join(
+        [
+            _field_html(
+                label="Prénom", name="first_name", field_id="id_create_first_name",
+                value=values.get("first_name", ""), required=True,
+                error=errors.get("first_name", ""),
+            ),
+            _field_html(
+                label="Nom", name="last_name", field_id="id_create_last_name",
+                value=values.get("last_name", ""), required=True,
+                error=errors.get("last_name", ""),
+            ),
+            _field_html(
+                label="Email", name="email", field_id="id_create_email",
+                input_type="email", value=values.get("email", ""),
+                error=errors.get("email", ""),
+            ),
+            _field_html(
+                label="Poste", name="position", field_id="id_create_position",
+                value=values.get("position", ""), required=True,
+                error=errors.get("position", ""),
+            ),
+            _field_html(
+                label="Date d'entrée", name="hire_date", field_id="id_create_hire_date",
+                input_type="date", value=values.get("hire_date", ""), required=True,
+                error=errors.get("hire_date", ""),
+            ),
+        ]
+    )
+
+
+def _employee_edit_drawer_content(employee, errors=None, values=None):
+    errors = errors or {}
+    values = values or {}
+    return "".join(
+        [
+            _field_html(
+                label="Prénom", name="first_name", field_id=f"id_edit_{employee.id}_first_name",
+                value=values.get("first_name", employee.first_name), required=True,
+                error=errors.get("first_name", ""),
+            ),
+            _field_html(
+                label="Nom", name="last_name", field_id=f"id_edit_{employee.id}_last_name",
+                value=values.get("last_name", employee.last_name), required=True,
+                error=errors.get("last_name", ""),
+            ),
+            _field_html(
+                label="Email", name="email", field_id=f"id_edit_{employee.id}_email",
+                input_type="email", value=values.get("email", employee.email),
+                error=errors.get("email", ""),
+            ),
+            _field_html(
+                label="Poste", name="position", field_id=f"id_edit_{employee.id}_position",
+                value=values.get("position", employee.position), required=True,
+                error=errors.get("position", ""),
+            ),
+            _field_html(
+                label="Date d'entrée", name="hire_date",
+                field_id=f"id_edit_{employee.id}_hire_date", input_type="date",
+                value=values.get("hire_date", employee.hire_date.isoformat()), required=True,
+                error=errors.get("hire_date", ""),
+            ),
+        ]
+    )
+
+
+def _render_employee_list_page(
+    request,
+    *,
+    open_drawer_id="",
+    create_errors=None,
+    create_values=None,
+    edit_employee_id=None,
+    edit_errors=None,
+    edit_values=None,
+    http_status=200,
+):
+    search = request.GET.get("q", "").strip()
+    employees = Employee.objects.all().order_by("last_name", "first_name")
+    if search:
+        employees = employees.filter(first_name__icontains=search) | employees.filter(
+            last_name__icontains=search
+        )
+    employees = list(employees)
+
+    can_write = has_permission(request.corrux_user, "rh.employee.write")
+
+    deactivate_modals_html = "".join(
+        _component_html(
+            "ui/components/modal.html",
+            ui_tags.corrux_modal,
+            modal_id=f"deactivate-employee-{e.id}",
+            title="Marquer cet employé comme inactif",
+            message=(
+                f"« {employee_full_name(e)} » sera marqué inactif. Son historique "
+                "(contrats, congés, documents) est intégralement conservé et "
+                "cette action peut être annulée ultérieurement."
+            ),
+            confirm_label="Marquer inactif",
+            action=reverse("ui-employee-deactivate", args=[e.id]),
+        )
+        for e in employees
+        if e.status == Employee.Status.ACTIVE
+    )
+
+    edit_drawers_html = "".join(
+        _component_html(
+            "ui/components/drawer.html",
+            ui_tags.corrux_drawer,
+            drawer_id=f"edit-employee-{e.id}",
+            title=f"Modifier « {employee_full_name(e)} »",
+            action=reverse("ui-employee-edit", args=[e.id]),
+            content=_employee_edit_drawer_content(
+                e,
+                errors=(edit_errors if edit_employee_id == e.id else None),
+                values=(edit_values if edit_employee_id == e.id else None),
+            ),
+            open=(open_drawer_id == f"edit-employee-{e.id}"),
+        )
+        for e in employees
+    )
+
+    context = {
+        "can_write": can_write,
+        "table_headers": ["Nom", "Poste", "Email", "Date d'entrée", "Statut", "Actions"],
+        "table_rows": _employee_table_rows(employees) if employees else [],
+        "employees_empty": not employees,
+        "search": search,
+        "employee_count": len(employees),
+        "create_drawer_content": _employee_create_drawer_content(create_errors, create_values),
+        "create_url": reverse("ui-employee-create"),
+        "create_drawer_open": open_drawer_id == "create-employee",
+        "edit_drawers_html": edit_drawers_html,
+        "deactivate_modals_html": deactivate_modals_html,
+        "open_drawer_id": open_drawer_id,
+    }
+    return render(request, "ui/employees/list.html", context, status=http_status)
+
+
+@require_GET
+def employee_list(request):
+    """Liste des employés — UI-401.
+
+    Permission de lecture vérifiée manuellement (même patron que
+    user_list, UI-201) : point de navigation principal, doit afficher
+    corrux_permission_denied plutôt qu'un 403 JSON brut."""
+    if request.corrux_user is None:
+        login_url = reverse("ui-login")
+        return HttpResponseRedirect(f"{login_url}?next={reverse('ui-employee-list')}")
+
+    if not module_is_activated("rh") or not has_permission(
+        request.corrux_user, "rh.employee.read"
+    ):
+        return render(
+            request, "ui/employees/list.html", {"permission_denied": True}, status=403
+        )
+
+    return _render_employee_list_page(request)
+
+
+def _parse_hire_date(raw_value):
+    try:
+        return date.fromisoformat(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+@require_permission("rh.employee.write")
+@require_POST
+def employee_create(request):
+    first_name = request.POST.get("first_name", "").strip()
+    last_name = request.POST.get("last_name", "").strip()
+    email = request.POST.get("email", "").strip()
+    position = request.POST.get("position", "").strip()
+    hire_date_raw = request.POST.get("hire_date", "").strip()
+
+    errors = {}
+    if not first_name:
+        errors["first_name"] = "Ce champ est requis."
+    if not last_name:
+        errors["last_name"] = "Ce champ est requis."
+    if not position:
+        errors["position"] = "Ce champ est requis."
+    hire_date_value = _parse_hire_date(hire_date_raw)
+    if not hire_date_raw:
+        errors["hire_date"] = "Ce champ est requis."
+    elif hire_date_value is None:
+        errors["hire_date"] = "Date invalide."
+
+    values = {
+        "first_name": first_name, "last_name": last_name, "email": email,
+        "position": position, "hire_date": hire_date_raw,
+    }
+    if errors:
+        return _render_employee_list_page(
+            request, open_drawer_id="create-employee",
+            create_errors=errors, create_values=values, http_status=400,
+        )
+
+    employee = create_employee(
+        first_name=first_name, last_name=last_name, email=email,
+        position=position, hire_date=hire_date_value,
+    )
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.employee_create",
+        target=employee_full_name(employee), metadata={},
+    )
+
+    return HttpResponseRedirect(reverse("ui-employee-list"))
+
+
+@require_permission("rh.employee.write")
+def employee_edit(request, employee_id):
+    employee = get_object_or_404(Employee, pk=employee_id)
+
+    if request.method not in ("GET", "HEAD", "POST"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+
+    if request.method != "POST":
+        return _render_employee_list_page(
+            request, open_drawer_id=f"edit-employee-{employee.id}"
+        )
+
+    first_name = request.POST.get("first_name", "").strip()
+    last_name = request.POST.get("last_name", "").strip()
+    email = request.POST.get("email", "").strip()
+    position = request.POST.get("position", "").strip()
+    hire_date_raw = request.POST.get("hire_date", "").strip()
+
+    errors = {}
+    if not first_name:
+        errors["first_name"] = "Ce champ est requis."
+    if not last_name:
+        errors["last_name"] = "Ce champ est requis."
+    if not position:
+        errors["position"] = "Ce champ est requis."
+    hire_date_value = _parse_hire_date(hire_date_raw)
+    if not hire_date_raw:
+        errors["hire_date"] = "Ce champ est requis."
+    elif hire_date_value is None:
+        errors["hire_date"] = "Date invalide."
+
+    values = {
+        "first_name": first_name, "last_name": last_name, "email": email,
+        "position": position, "hire_date": hire_date_raw,
+    }
+    if errors:
+        return _render_employee_list_page(
+            request, open_drawer_id=f"edit-employee-{employee.id}",
+            edit_employee_id=employee.id, edit_errors=errors, edit_values=values,
+            http_status=400,
+        )
+
+    # Le statut n'est jamais modifié par ce formulaire — action séparée
+    # dédiée (« Marquer inactif », employee_deactivate), cohérent avec
+    # la maquette (Drawer Édition sans champ Statut).
+    update_employee(
+        employee=employee, first_name=first_name, last_name=last_name, email=email,
+        position=position, hire_date=hire_date_value, status=employee.status,
+    )
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.employee_update",
+        target=employee_full_name(employee), metadata={},
+    )
+
+    return HttpResponseRedirect(reverse("ui-employee-list"))
+
+
+@require_permission("rh.employee.write")
+@require_POST
+def employee_deactivate(request, employee_id):
+    """Marque un employé inactif — critère d'acceptation explicite :
+    conserve l'historique (délègue à deactivate_employee(), TECH-031,
+    qui ne modifie jamais que le champ status)."""
+    employee = get_object_or_404(Employee, pk=employee_id)
+    deactivate_employee(employee=employee)
+
+    record_audit_event(
+        actor=request.corrux_user, action="rh.employee_deactivate",
+        target=employee_full_name(employee), metadata={},
+    )
+    return HttpResponseRedirect(reverse("ui-employee-list"))
