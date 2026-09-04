@@ -180,7 +180,7 @@ class TestRhRequiresModuleAndPermission:
         """Décision produit #9 : un item isolé disparaît sans casser le
         reste du groupe (Employés visible, Congés absent)."""
         user = make_user("rh_partiel")
-        _grant(user, "rh.employe.lire")
+        _grant(user, "rh.employee.read")
         _activate_module("rh")
 
         groups = get_navigation(user)
@@ -191,7 +191,7 @@ class TestRhRequiresModuleAndPermission:
 
     def test_rh_group_absent_without_module_active(self, make_user):
         user = make_user("rh_sans_module")
-        _grant(user, "rh.employe.lire", "rh.conge.lire")
+        _grant(user, "rh.employee.read", "rh.leave_request.read")
         # rh n'est pas activé.
 
         groups = get_navigation(user)
@@ -215,7 +215,7 @@ class TestMultipleRoles:
 
         role_b = Role.objects.create(name="Lecteur RH")
         perm_b, _ = Permission.objects.get_or_create(
-            module_id="rh", resource="employe", action="lire"
+            module_id="rh", resource="employee", action="read"
         )
         RolePermission.objects.create(role=role_b, permission=perm_b)
         UserRole.objects.create(user=user, role=role_b)
@@ -234,7 +234,7 @@ class TestFullMultiGroupScenario:
         """Scénario combiné réaliste : Administrateur RH avec Documentation
         installé mais pas encore activé — seule RH doit apparaître."""
         user = make_user("admin_rh")
-        _grant(user, "rh.employe.lire", "rh.conge.lire", "core.user.read")
+        _grant(user, "rh.employee.read", "rh.leave_request.read", "core.user.read")
         _activate_module("rh")
         Module.objects.create(
             id="documentation", name="Documentation", version="1.0.0",

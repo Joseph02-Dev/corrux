@@ -1,0 +1,19 @@
+id: rh
+name: "Ressources Humaines"
+version: "1.0.0"
+depends_on:
+  - module: documentation
+    version: ">=1.0.0"
+permissions:
+  - resource: employee
+    actions: [read, write]
+  - resource: contract
+    actions: [read, write]
+  - resource: leave_request
+    actions: [read, write, approve]
+provides_api: []
+consumes_api:
+  - module: documentation
+    interface: "documents.v1"
+db_schema: rh
+migrations_path: migrations/

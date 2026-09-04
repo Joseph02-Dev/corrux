@@ -82,9 +82,9 @@ def get_navigation(user: User | None) -> tuple[NavGroup, ...]:
 
     rh_items: list[NavItem] = []
     if module_is_activated("rh"):
-        if has_permission(user, "rh.employe.lire"):
+        if has_permission(user, "rh.employee.read"):
             rh_items.append(NavItem("Employés", "#", "user"))
-        if has_permission(user, "rh.conge.lire"):
+        if has_permission(user, "rh.leave_request.read"):
             rh_items.append(NavItem("Congés", "#", "check"))
     if rh_items:
         groups.append(NavGroup("Ressources Humaines", tuple(rh_items)))
