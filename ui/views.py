@@ -2777,13 +2777,16 @@ def employee_document_upload(request, employee_id):
 
 
 def _document_picker_access(request, contract_id, folder_id=None):
-    """Même modèle d'accès à deux niveaux que UI-403 : rh.employee.write
-    (le sélecteur ne sert qu'à modifier un contrat) PUIS
+    """Correction (Option A, audit Phase 1 UI-405) : rh.contract.write —
+    pas rh.employee.write. Le sélecteur ne sert qu'à modifier le
+    document lié d'UN contrat précis ; la maquette et le manifeste
+    RH (TECH-035) déclarent une ressource "contract" distincte de
+    "employee" précisément pour cette granularité. PUIS
     documentation.document.read pour parcourir réellement."""
     contract = get_object_or_404(Contract, pk=contract_id)
 
     if not module_is_activated("rh") or not has_permission(
-        request.corrux_user, "rh.employee.write"
+        request.corrux_user, "rh.contract.write"
     ):
         return None, None, render(
             request, "ui/employees/detail.html", {"permission_denied": True}, status=403
@@ -2881,9 +2884,11 @@ def document_picker(request, contract_id, folder_id=None):
 
 @require_POST
 def document_picker_select(request, contract_id, document_id):
-    """Choisit un document existant pour ce contrat — UI-404."""
+    """Choisit un document existant pour ce contrat — UI-404.
+
+    Correction (Option A, audit Phase 1 UI-405) : rh.contract.write."""
     contract = get_object_or_404(Contract, pk=contract_id)
-    if not has_permission(request.corrux_user, "rh.employee.write"):
+    if not has_permission(request.corrux_user, "rh.contract.write"):
         return HttpResponseForbidden()
 
     try:
@@ -2970,12 +2975,16 @@ def document_picker_upload(request, contract_id, folder_id=None):
 # --- Onglet Contrats ---------------------------------------------------------------
 
 
-def _contract_table_rows(contracts):
+def _contract_table_rows(contracts, can_edit):
     rows = []
     for contract in contracts:
         document_label = f"Document #{contract.document_ref}" if contract.document_ref else "—"
-        actions = _modal_trigger_html(
-            modal_id=f"edit-contract-{contract.id}", label="Modifier", variant="secondary"
+        actions = (
+            _modal_trigger_html(
+                modal_id=f"edit-contract-{contract.id}", label="Modifier", variant="secondary"
+            )
+            if can_edit
+            else ""
         )
         rows.append(
             ui_tags.TableRow(
@@ -3079,8 +3088,15 @@ def _render_employee_contracts_page(
     edit_contract_id=None, edit_errors=None, edit_values=None,
     http_status=200,
 ):
+    """Correction (Option A, audit Phase 1 UI-405) : can_edit_contracts
+    (rh.contract.write) est distinct de can_edit_employee
+    (rh.employee.write, en-tête partagé) — deux ressources déclarées
+    séparément par le manifeste RH (TECH-035), la maquette exige la
+    même granularité (rh.contrat.lire/creer distinct de
+    rh.employe.lire/creer)."""
     contracts = list(Contract.objects.filter(employee=employee).order_by("-start_date"))
-    can_edit = has_permission(request.corrux_user, "rh.employee.write")
+    can_edit_employee = has_permission(request.corrux_user, "rh.employee.write")
+    can_edit_contracts = has_permission(request.corrux_user, "rh.contract.write")
 
     edit_drawers_html = "".join(
         _component_html(
@@ -3098,12 +3114,12 @@ def _render_employee_contracts_page(
     )
 
     context = {
-        "header_html": _employee_record_header(employee, can_edit),
+        "header_html": _employee_record_header(employee, can_edit_employee),
         "tabs_html": _employee_record_tabs(employee, "contrats"),
         "table_headers": ["Type", "Début", "Fin", "Statut", "Document lié", "Actions"],
-        "table_rows": _contract_table_rows(contracts) if contracts else [],
+        "table_rows": _contract_table_rows(contracts, can_edit_contracts) if contracts else [],
         "contracts_empty": not contracts,
-        "can_edit": can_edit,
+        "can_edit": can_edit_contracts,
         "create_drawer_content": _contract_create_drawer_content(create_errors, create_values),
         "create_url": reverse("ui-employee-contract-create", args=[employee.id]),
         "create_drawer_open": open_drawer_id == "create-contract",
@@ -3114,7 +3130,12 @@ def _render_employee_contracts_page(
 
 @require_GET
 def employee_contracts_tab(request, employee_id):
-    """Onglet Contrats — UI-404."""
+    """Onglet Contrats — UI-404.
+
+    Correction (Option A, audit Phase 1 UI-405) : rh.employee.read
+    (accès à la fiche) PUIS rh.contract.read séparément pour le
+    contenu de cet onglet précis — même patron à deux niveaux que
+    UI-403 (documentation.document.read)."""
     if request.corrux_user is None:
         login_url = reverse("ui-login")
         return HttpResponseRedirect(
@@ -3129,6 +3150,15 @@ def employee_contracts_tab(request, employee_id):
             request, "ui/employees/detail.html", {"permission_denied": True}, status=403
         )
 
+    can_edit_employee = has_permission(request.corrux_user, "rh.employee.write")
+    if not has_permission(request.corrux_user, "rh.contract.read"):
+        context = {
+            "header_html": _employee_record_header(employee, can_edit_employee),
+            "tabs_html": _employee_record_tabs(employee, "contrats"),
+            "tab_permission_denied": True,
+        }
+        return render(request, "ui/employees/contracts_tab.html", context, status=403)
+
     return _render_employee_contracts_page(request, employee)
 
 
@@ -3139,7 +3169,7 @@ def _parse_contract_date(raw_value):
         return None
 
 
-@require_permission("rh.employee.write")
+@require_permission("rh.contract.write")
 @require_POST
 def employee_contract_create(request, employee_id):
     employee = get_object_or_404(Employee, pk=employee_id)
@@ -3183,7 +3213,7 @@ def employee_contract_create(request, employee_id):
     return HttpResponseRedirect(reverse("ui-employee-contracts", args=[employee.id]))
 
 
-@require_permission("rh.employee.write")
+@require_permission("rh.contract.write")
 def employee_contract_edit(request, employee_id, contract_id):
     employee = get_object_or_404(Employee, pk=employee_id)
     contract = get_object_or_404(Contract, pk=contract_id, employee=employee)

@@ -88,6 +88,7 @@ def reader(db):
     auth.set_user_password(user, "Password123!")
     user.save()
     _grant(user, "rh", "employee", "read")
+    _grant(user, "rh", "contract", "read")
     return user
 
 
@@ -97,7 +98,8 @@ def writer(db):
     auth.set_user_password(user, "Password123!")
     user.save()
     _grant(user, "rh", "employee", "read")
-    _grant(user, "rh", "employee", "write")
+    _grant(user, "rh", "contract", "read")
+    _grant(user, "rh", "contract", "write")
     _grant(user, "documentation", "document", "read")
     return user
 
@@ -135,6 +137,46 @@ class TestTabAccess:
         client = _authenticated_client(reader)
         content = client.get(_contracts_url(employee.id)).content.decode()
         assert "create-contract" not in content
+
+    def test_employee_read_alone_is_not_enough_for_tab_content(self, employee, db):
+        """Correction de granularité (Option A, audit Phase 1 UI-405) :
+        rh.employee.read seul ne suffit pas — rh.contract.read est
+        requis séparément, même patron que UI-403
+        (documentation.document.read)."""
+        user = User.objects.create(username="employee_read_seul", full_name="Sans Contrats")
+        auth.set_user_password(user, "Password123!")
+        user.save()
+        _grant(user, "rh", "employee", "read")
+
+        client = _authenticated_client(user)
+        response = client.get(_contracts_url(employee.id))
+        assert response.status_code == 403
+
+    def test_tab_permission_denied_still_shows_header_and_tabs(self, employee, db):
+        user = User.objects.create(username="employee_read_seul2", full_name="Sans Contrats 2")
+        auth.set_user_password(user, "Password123!")
+        user.save()
+        _grant(user, "rh", "employee", "read")
+
+        client = _authenticated_client(user)
+        content = client.get(_contracts_url(employee.id)).content.decode()
+        assert "Jean Dupont" in content
+        assert "corrux-permission-denied" in content
+
+    def test_modify_button_hidden_without_contract_write(self, employee, db, storage_root):
+        """rh.contract.read seul (sans write) ne doit jamais montrer le
+        bouton Modifier — même correction que UI-401 avait déjà
+        appliquée pour les employés."""
+        user = User.objects.create(username="contract_read_seul", full_name="Lecture Seule")
+        auth.set_user_password(user, "Password123!")
+        user.save()
+        _grant(user, "rh", "employee", "read")
+        _grant(user, "rh", "contract", "read")
+        create_contract(employee=employee, type="CDI", start_date=date(2026, 1, 1))
+
+        client = _authenticated_client(user)
+        content = client.get(_contracts_url(employee.id)).content.decode()
+        assert "edit-contract" not in content
 
 
 # --- B. Création de contrat -------------------------------------------------------
@@ -228,7 +270,7 @@ class TestPickerAccess:
         user = User.objects.create(username="rh_sans_doc", full_name="RH Sans Doc")
         auth.set_user_password(user, "Password123!")
         user.save()
-        _grant(user, "rh", "employee", "write")
+        _grant(user, "rh", "contract", "write")
         contract = create_contract(employee=employee, type="CDI", start_date=date(2026, 1, 1))
 
         client = _authenticated_client(user)
