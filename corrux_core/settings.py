@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "core",
     "core.backup",
     "core.certs",
+    "ops",
     # Modules métier V1 (squelettes vides, cf. INIT-001)
     "modules.documentation",
     "modules.rh",

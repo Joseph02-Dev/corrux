@@ -186,7 +186,7 @@ class TestMatrixContent:
 
     def test_granted_permission_shows_toggle_on(self, admin_user, predefined_roles):
         admin_role = Role.objects.get(name="Administrateur")
-        permission = Permission.objects.create(
+        permission, _ = Permission.objects.get_or_create(
             module_id="core", resource="backup", action="read"
         )
         RolePermission.objects.create(role=admin_role, permission=permission)
@@ -228,7 +228,9 @@ class TestToggleEffect:
 
     def test_toggle_off_revokes_the_permission(self, admin_user):
         employe_role = Role.objects.get(name="Employé")
-        permission = Permission.objects.create(module_id="core", resource="audit", action="read")
+        permission, _ = Permission.objects.get_or_create(
+            module_id="core", resource="audit", action="read"
+        )
         RolePermission.objects.create(role=employe_role, permission=permission)
 
         target_user = User.objects.create(username="cible_toggle_off", full_name="Cible")
@@ -377,7 +379,9 @@ class TestAudit:
 
     def test_revoke_produces_audit_event(self, admin_user):
         employe_role = Role.objects.get(name="Employé")
-        permission = Permission.objects.create(module_id="core", resource="audit", action="read")
+        permission, _ = Permission.objects.get_or_create(
+            module_id="core", resource="audit", action="read"
+        )
         RolePermission.objects.create(role=employe_role, permission=permission)
 
         client = _authenticated_client(admin_user)

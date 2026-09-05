@@ -96,7 +96,12 @@ class TestPermission:
         Permission.objects.create(module_id="documentation", resource="document", action="read")
         # même resource/action mais module différent : autorisé (triplet distinct).
         Permission.objects.create(module_id="rh", resource="document", action="read")
-        assert Permission.objects.count() == 2
+        assert Permission.objects.filter(
+            module_id="documentation", resource="document", action="read"
+        ).exists()
+        assert Permission.objects.filter(
+            module_id="rh", resource="document", action="read"
+        ).exists()
 
 
 @pytest.mark.django_db
