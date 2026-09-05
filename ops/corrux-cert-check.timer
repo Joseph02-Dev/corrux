@@ -1,0 +1,16 @@
+# CORRUX — vérification périodique d'expiration du certificat serveur
+# (§10 : "corrux-cert-check.timer alerte... avant expiration").
+# Fréquence quotidienne = suffisante pour un seuil d'alerte exprimé en
+# jours (DEFAULT_ALERT_THRESHOLD_DAYS) ; surchargeable par un drop-in
+# systemd généré par corrux-setup, même patron que corrux-backup.timer.
+
+[Unit]
+Description=Vérification périodique de l'expiration du certificat CORRUX
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=corrux-cert-check.service
+
+[Install]
+WantedBy=timers.target

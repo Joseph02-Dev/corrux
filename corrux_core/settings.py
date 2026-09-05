@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     "rest_framework",
     # Platform Core (squelette — modèles ajoutés à partir de TECH-001)
     "core",
+    "core.backup",
+    "core.certs",
     # Modules métier V1 (squelettes vides, cf. INIT-001)
     "modules.documentation",
     "modules.rh",

@@ -1,0 +1,27 @@
+# CORRUX — service de vérification d'expiration du certificat (§10).
+# Déclenché par corrux-cert-check.timer (jamais lancé au boot
+# directement). Chemins et compte système exacts finalisés par le
+# packaging (TECH-043) et l'installation (TECH-012) — valeurs
+# ci-dessous illustratives, cohérentes avec l'architecture (§5 :
+# compte système dédié, pas d'exécution en root) — même patron exact
+# que corrux-backup.service (TECH-009).
+
+[Unit]
+Description=CORRUX — vérification d'expiration du certificat serveur
+
+[Service]
+Type=oneshot
+User=corrux
+Group=corrux
+# Fournit CORRUX_CERT_SERVER_CERT_PATH et, optionnellement,
+# CORRUX_CERT_ALERT_THRESHOLD_DAYS — généré par corrux-setup (TECH-012).
+EnvironmentFile=/etc/corrux/certs.env
+WorkingDirectory=/opt/corrux
+ExecStart=/opt/corrux/.venv/bin/python manage.py check_certificate_expiry
+
+# Durcissement systemd standard (défense en profondeur, §16) :
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/etc/corrux
