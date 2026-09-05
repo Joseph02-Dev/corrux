@@ -1,0 +1,44 @@
+# CORRUX — processus applicatif principal (§5 : « corrux-core.service —
+# le processus applicatif unique »). Mentionné une seule fois dans
+# l'architecture, jamais construit par aucun ticket précédent — corrigé
+# à l'occasion de la revue de procédure de TECH-044 (documentation
+# technicien), pas un oubli d'implémentation caché.
+#
+# Serveur WSGI de production (gunicorn) — jamais manage.py runserver,
+# serveur de développement Django non prévu pour la production.
+# Écoute en localhost uniquement (§5 : « corrux-core n'écoute que sur
+# localhost ») ; seul Nginx (TECH-011) expose un port réseau (443 LAN).
+#
+# Chemins et compte système exacts finalisés par le packaging
+# (TECH-043) et l'installation (TECH-012) — mêmes conventions que
+# corrux-backup.service/corrux-cert-check.service.
+
+[Unit]
+Description=CORRUX — processus applicatif principal (Platform Core + modules)
+After=postgresql.service network.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=corrux
+Group=corrux
+# Fournit DB_*, DJANGO_SETTINGS_MODULE, CORRUX_STORAGE_ROOT — généré
+# par corrux-setup (TECH-012).
+EnvironmentFile=/etc/corrux/core.env
+WorkingDirectory=/opt/corrux
+ExecStart=/opt/corrux/.venv/bin/gunicorn \
+    --bind 127.0.0.1:8000 \
+    --workers 3 \
+    corrux_core.wsgi:application
+Restart=on-failure
+RestartSec=5
+
+# Durcissement systemd standard (défense en profondeur, §16) :
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/corrux/storage
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

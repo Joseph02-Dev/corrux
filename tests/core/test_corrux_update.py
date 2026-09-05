@@ -13,6 +13,7 @@ installé) avant d'écrire la moindre assertion.
 """
 
 import hashlib
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -351,3 +352,32 @@ class TestInvalidSignature:
 
         entry = AuditLog.objects.get(action="update.refused", actor_user=actor)
         assert entry.metadata["reason"] == "signature_invalide"
+
+
+# --- D. Commande CLI — gap trouvé lors de l'audit Phase 1 de TECH-044 ----------
+# apply_offline_update() n'avait jamais été enveloppée dans une
+# commande manage.py invocable — seule la fonction de service
+# existait, aucun point d'entrée technicien. Corrigé à l'occasion de
+# TECH-044 (nécessaire pour documenter honnêtement une procédure
+# réellement exécutable).
+
+
+@pytest.mark.django_db
+class TestApplyOfflineUpdateCommand:
+    def test_command_is_discoverable(self):
+        from django.core.management import get_commands
+
+        assert get_commands().get("apply_offline_update") == "ops"
+
+    def test_command_applies_a_valid_update_end_to_end(self, tmp_path, valid_media, release_key):
+        from django.core.management import call_command
+
+        os.environ["CORRUX_UPDATE_MOUNT_POINT"] = str(tmp_path / "mnt")
+        os.environ["CORRUX_UPDATE_TRUSTED_KEY_PATH"] = str(release_key["public_key_path"])
+        try:
+            call_command("apply_offline_update", "--device", valid_media)
+        finally:
+            del os.environ["CORRUX_UPDATE_MOUNT_POINT"]
+            del os.environ["CORRUX_UPDATE_TRUSTED_KEY_PATH"]
+
+        assert TEST_MARKER_PATH.read_text() == "v1.0.0"

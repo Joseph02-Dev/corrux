@@ -161,10 +161,22 @@ class TestPackageStructure:
             ["dpkg-deb", "--contents", str(built_packages["corrux-core"])],
             capture_output=True, text=True, check=True,
         )
+        assert "./lib/systemd/system/corrux-core.service" in result.stdout
         assert "./lib/systemd/system/corrux-backup.timer" in result.stdout
         assert "./lib/systemd/system/corrux-backup.service" in result.stdout
         assert "./lib/systemd/system/corrux-cert-check.timer" in result.stdout
         assert "./etc/nginx/sites-available/corrux.conf" in result.stdout
+
+    def test_corrux_core_depends_on_gunicorn(self, built_packages):
+        """corrux-core.service (§5) exige un serveur WSGI de production
+        — gap trouvé et corrigé lors de la revue de procédure TECH-044,
+        corrux-core.service n'ayant été construit par aucun ticket
+        précédent."""
+        result = subprocess.run(
+            ["dpkg-deb", "--info", str(built_packages["corrux-core"])],
+            capture_output=True, text=True, check=True,
+        )
+        assert "gunicorn" in result.stdout
 
     def test_postinst_never_starts_a_service_or_creates_a_system_user(self):
         """Décision confirmée à l'audit Phase 1 : postinst

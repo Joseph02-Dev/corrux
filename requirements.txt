@@ -6,3 +6,9 @@ djangorestframework==3.18.*
 psycopg[binary]==3.3.*
 argon2-cffi==25.1.*
 PyYAML==6.0.*
+# Serveur WSGI de production pour corrux-core.service — jamais
+# manage.py runserver (serveur de développement Django, non prévu pour
+# la production). Ajouté lors de la revue de procédure TECH-044 :
+# corrux-core.service n'avait été construit par aucun ticket précédent
+# (gap réel du plan lui-même, pas un oubli d'implémentation).
+gunicorn==26.*

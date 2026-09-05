@@ -197,6 +197,7 @@ CORRUX_CORE_DEPENDS = (
     "python3-yaml",
     "python3-argon2",
     "postgresql-client",
+    "gunicorn",
 )
 
 
@@ -219,6 +220,9 @@ def build_corrux_core_spec(version: str) -> PackageSpec:
             PythonPackageMapping("ops", f"{INSTALL_PREFIX}/ops"),
         ),
         system_unit_mappings=(
+            SystemUnitMapping(
+                "ops/corrux-core.service", "/lib/systemd/system/corrux-core.service"
+            ),
             SystemUnitMapping(
                 "ops/corrux-backup.timer", "/lib/systemd/system/corrux-backup.timer"
             ),

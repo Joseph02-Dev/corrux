@@ -383,3 +383,41 @@ class TestUntrustedRepository:
 
         entry = AuditLog.objects.get(action="update.refused", actor_user=actor)
         assert entry.metadata["reason"] == "depot_non_verifie"
+
+
+# --- C. Commande CLI — gap trouvé lors de l'audit Phase 1 de TECH-044 ----------
+# apply_online_update() n'avait jamais été enveloppée dans une commande
+# manage.py invocable — même situation que apply_offline_update
+# (tests/core/test_corrux_update.py), corrigée à l'occasion de TECH-044.
+
+
+@pytest.mark.django_db
+class TestApplyOnlineUpdateCommand:
+    def test_command_is_discoverable(self):
+        from django.core.management import get_commands
+
+        assert get_commands().get("apply_online_update") == "ops"
+
+    def test_command_applies_a_valid_update_end_to_end(
+        self, tmp_path, https_repo_server, release_key
+    ):
+        from django.core.management import call_command
+
+        os.environ["CORRUX_UPDATE_REPOSITORY_URL"] = https_repo_server["repository_url"]
+        os.environ["CORRUX_UPDATE_TRUSTED_KEYRING_PATH"] = str(release_key["keyring_path"])
+        os.environ["CORRUX_UPDATE_CA_CERT_PATH"] = str(https_repo_server["ca_cert_path"])
+        os.environ["CORRUX_UPDATE_ISOLATION_ROOT"] = str(tmp_path / "apt_isolated")
+        try:
+            call_command(
+                "apply_online_update",
+                "--packages", TEST_PACKAGE_NAME,
+                "--target-version", "1.0.0",
+            )
+        finally:
+            for key in (
+                "CORRUX_UPDATE_REPOSITORY_URL", "CORRUX_UPDATE_TRUSTED_KEYRING_PATH",
+                "CORRUX_UPDATE_CA_CERT_PATH", "CORRUX_UPDATE_ISOLATION_ROOT",
+            ):
+                del os.environ[key]
+
+        assert TEST_MARKER_PATH.read_text() == "v1.0.0-online"
