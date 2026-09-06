@@ -1,0 +1,95 @@
+### CORRUX — Preseed Debian 13 « Trixie »
+#
+# Installation technicien (architecture-technique-v1.md §4) : système
+# figé sur disque, sans intervention graphique, sans accès Internet
+# requis (mini-dépôt local embarqué, cf. build_repo.sh). corrux-setup
+# (déjà écrit et testé dans le dépôt applicatif) prend le relais en fin
+# d'installation pour la configuration métier (identité, HTTPS,
+# sauvegarde, activation des modules) — ce preseed ne fait QUE poser un
+# OS Debian 13 + les paquets CORRUX, rien de plus (séparation stricte
+# infra/métier, cohérente avec le principe COMP-05 §"RÈGLE
+# FONDAMENTALE").
+#
+# SÉCURITÉ : le jeton __CORRUX_TECH_PASSWORD_HASH__ ci-dessous est
+# substitué par build_iso.sh au moment du build, à partir d'un hash
+# (crypt SHA-512) fourni explicitement par la personne qui construit
+# l'ISO — jamais un mot de passe en clair, jamais une valeur inventée
+# ou par défaut ici.
+
+# Localisation
+d-i debian-installer/locale string fr_FR.UTF-8
+d-i keyboard-configuration/xkb-keymap select fr(latin9)
+
+# Réseau : DHCP par défaut (§9 architecture — aucune décision produit
+# figée sur IP statique/hostname ; le technicien ajuste après coup si
+# besoin, hors périmètre de ce preseed).
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string corrux-server
+d-i netcfg/get_domain string local
+
+# Miroir réseau désactivé : mode offline garanti (§19 architecture).
+# Seul le dépôt local embarqué (build_repo.sh) est utilisé.
+d-i mirror/country string manual
+d-i mirror/http/hostname string
+d-i mirror/http/directory string /
+choose-mirror-bin mirror/http/proxy string
+
+# Partitionnement : disque système entier, LVM, un seul volume racine.
+# Le second volume (support de sauvegarde, §11.1 architecture) est
+# volontairement HORS de ce preseed : corrux-setup le détecte et le
+# monte lui-même (logique déjà écrite et testée dans le dépôt
+# applicatif, ops/setup_service.py) — ne pas dupliquer cette décision
+# ici au niveau OS.
+d-i partman-auto/method string lvm
+d-i partman-auto/choose_recipe select atomic
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+# Compte technicien (compte d'installation uniquement — le compte
+# administrateur CORRUX applicatif est distinct et créé par
+# corrux-setup, cf. ops/setup_service.py). Pas de compte root distinct
+# : sudo uniquement, conforme à "pas d'exécution en root" (§16).
+d-i passwd/root-login boolean false
+d-i passwd/make-user boolean true
+d-i passwd/user-fullname string Technicien CORRUX
+d-i passwd/username string corrux-tech
+d-i passwd/user-password-crypted password __CORRUX_TECH_PASSWORD_HASH__
+
+# Fuseau horaire
+d-i clock-setup/utc boolean true
+d-i time/zone string UTC
+
+# Dépôt local uniquement (mini-dépôt constitué par build_repo.sh,
+# monté depuis le support d'installation) — aucun dépôt Debian
+# officiel réseau ajouté ici volontairement (mode offline garanti).
+d-i apt-setup/local1/repository string \
+    file:/cdrom/corrux-repo ./
+d-i apt-setup/local1/comment string Dépôt local CORRUX (offline)
+d-i apt-setup/local1/source boolean false
+
+# Paquets : uniquement CORRUX + dépendances explicites (§3 : dépôts
+# Debian 13 officiels embarqués dans l'ISO netinst, pas de paquet
+# superflu ajouté par ce preseed).
+tasksel tasksel/first multiselect standard
+d-i pkgsel/include string corrux-core corrux-module-documentation corrux-module-rh
+d-i pkgsel/upgrade select none
+popularity-contest popularity-contest/participate boolean false
+
+# Bootloader : hybride BIOS+UEFI (décision confirmée §C2, BUILD-002).
+# Ne pas modifier grub-efi/shim-signed au-delà de leur configuration
+# standard Debian — préserve la chaîne Secure Boot officielle.
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/with_other_os boolean true
+
+# Fin d'installation : lance corrux-setup en mode interactif (pas de
+# paramètre --admin-*/--certificate-*, etc. ici — le technicien répond
+# lui-même aux questions métier au premier démarrage, cf. ux-ui-design
+# §3 parcours #1). Ce preseed ne configure QUE l'OS.
+d-i preseed/late_command string \
+    in-target systemctl enable corrux-core.service corrux-backup.timer corrux-cert-check.timer
+
+d-i finish-install/reboot_in_progress note
