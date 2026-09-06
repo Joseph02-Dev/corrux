@@ -97,14 +97,27 @@ sed "s|__CORRUX_TECH_PASSWORD_HASH__|${CORRUX_TECH_PASSWORD_HASH}|" \
 # Ajout des paramètres de boot preseed sur les entrées par défaut
 # (isolinux BIOS + grub UEFI), sans toucher au reste de la chaîne de
 # boot officielle Debian.
+#
+# debian-installer/language, /country et /locale sont ajoutés
+# EXPLICITEMENT sur la ligne de commande noyau (pas seulement dans le
+# fichier preseed) : ce sont les deux/trois seules questions posées
+# avant que le fichier preseed (chargé depuis /cdrom) ne puisse être
+# lu — sans cela, l'installeur reste bloqué sur l'écran interactif
+# « Select a language », jamais atteint par une préconfiguration
+# fournie uniquement via `file=`. Bug réel constaté et corrigé lors du
+# test BUILD-004 (doc officielle Debian : apbs04, « The commands
+# debian-installer/language and debian-installer/country [...] can
+# only be preseeded using the kernel boot parameters »).
+D_I_BOOT_PARAMS="auto=true priority=critical debian-installer/language=en debian-installer/country=US debian-installer/locale=en_US.UTF-8 file=/cdrom/corrux.preseed"
+
 if [ -f "${EXTRACT_DIR}/isolinux/txt.cfg" ]; then
     sed -i \
-        's|append |append auto=true priority=critical file=/cdrom/corrux.preseed |' \
+        "s|append |append ${D_I_BOOT_PARAMS} |" \
         "${EXTRACT_DIR}/isolinux/txt.cfg"
 fi
 if [ -f "${EXTRACT_DIR}/boot/grub/grub.cfg" ]; then
     sed -i \
-        's|linux    /install.amd/vmlinuz|linux    /install.amd/vmlinuz auto=true priority=critical file=/cdrom/corrux.preseed|' \
+        "s|linux    /install.amd/vmlinuz|linux    /install.amd/vmlinuz ${D_I_BOOT_PARAMS}|" \
         "${EXTRACT_DIR}/boot/grub/grub.cfg"
 fi
 

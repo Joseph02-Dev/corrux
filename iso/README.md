@@ -61,6 +61,42 @@ Produit `<répertoire_de_travail>/corrux-server-<version>.iso` et son
   entièrement à la charge de `corrux-setup`, exécuté au premier
   démarrage — ce mécanisme ne configure que l'OS.
 
+## BUILD-004 — Test de boot réel (état honnête)
+
+Un test de boot a été mené sous QEMU (émulation logicielle `tcg`, sans
+KVM) dans l'environnement de développement. Deux bugs réels ont été
+trouvés et corrigés grâce à ce test :
+
+1. **Langue/pays/locale non préseedables via `file=` seul** : ce sont
+   les premières questions posées par `debian-installer`, avant même
+   que le fichier preseed chargé depuis `/cdrom` ne puisse être lu.
+   Sans les paramètres `debian-installer/language=`, `/country=`,
+   `/locale=` explicitement sur la ligne de commande noyau,
+   l'installation reste bloquée sur un écran interactif. Corrigé dans
+   `build_iso.sh` (paramètres ajoutés à l'injection des entrées de
+   boot isolinux/grub).
+2. **Boucle infinie de synchronisation NTP** (« Setting up the
+   clock ») en l'absence de sortie réseau fiable vers un serveur de
+   temps. Corrigé par `d-i clock-setup/ntp boolean false` dans le
+   preseed — cohérent avec le principe produit « CORRUX fonctionne
+   sans accès Internet garanti ».
+
+Après ces deux corrections, l'installation progresse correctement
+au-delà (réseau, horloge, chargement des composants LVM) dans
+l'environnement de test.
+
+**Ce qui n'a PAS pu être prouvé dans ce sandbox** : un cycle complet
+d'installation automatisée jusqu'à son terme. L'environnement de
+développement utilisé ne dispose d'aucune accélération matérielle de
+virtualisation (`/dev/kvm` absent), et son mécanisme d'exécution de
+commandes impose une limite de durée par appel qui s'est révélée
+inférieure au temps nécessaire à une installation Debian complète en
+émulation logicielle pure (1 vCPU). Comme `debian-installer` ne
+reprend jamais une installation interrompue, chaque essai tronqué
+recommençait entièrement — un test de bout en bout réel nécessite un
+environnement avec accélération matérielle (KVM réel ou machine
+physique), hors périmètre de ce sandbox.
+
 ## Sécurité
 
 - Aucun secret en dur dans le dépôt : mot de passe technicien fourni

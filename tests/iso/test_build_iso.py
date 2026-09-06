@@ -36,6 +36,26 @@ def test_preseed_uses_local_repository_only_no_network_mirror():
     assert "file:/cdrom/corrux-repo" in content
 
 
+def test_preseed_disables_network_ntp_sync():
+    # Bug réel constaté lors de BUILD-004 : la synchronisation horaire
+    # réseau (NTP) bouclait indéfiniment en environnement sans sortie
+    # réseau fiable pour ce service. Cohérent aussi avec le principe
+    # produit « CORRUX fonctionne sans accès Internet garanti ».
+    content = (ISO_DIR / "preseed" / "corrux.preseed").read_text()
+    assert "clock-setup/ntp boolean false" in content
+
+
+def test_build_iso_script_injects_early_language_country_locale_params():
+    # Bug réel constaté lors de BUILD-004 : sans ces paramètres sur la
+    # ligne de commande noyau (en plus du fichier preseed), l'installeur
+    # reste bloqué sur l'écran interactif "Select a language" avant même
+    # de pouvoir charger le preseed depuis /cdrom.
+    content = (ISO_DIR / "build_iso.sh").read_text()
+    assert "debian-installer/language=en" in content
+    assert "debian-installer/country=US" in content
+    assert "debian-installer/locale=en_US.UTF-8" in content
+
+
 def test_build_iso_script_requires_password_hash_env_var(tmp_path):
     env_without_hash = {"PATH": "/usr/bin:/bin"}
     result = subprocess.run(

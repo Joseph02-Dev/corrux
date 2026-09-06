@@ -59,8 +59,14 @@ d-i passwd/user-fullname string Technicien CORRUX
 d-i passwd/username string corrux-tech
 d-i passwd/user-password-crypted password __CORRUX_TECH_PASSWORD_HASH__
 
-# Fuseau horaire
+# Fuseau horaire — NTP désactivé : CORRUX fonctionne sans accès
+# Internet garanti (vision-produit-v1.md §5) ; dépendre d'un serveur
+# NTP réseau pendant l'installation contredirait ce principe et a été
+# constaté comme bloquant en environnement sans sortie réseau fiable
+# (boucle infinie observée lors du test BUILD-004). L'horloge
+# matérielle du serveur est utilisée telle quelle.
 d-i clock-setup/utc boolean true
+d-i clock-setup/ntp boolean false
 d-i time/zone string UTC
 
 # Dépôt local uniquement (mini-dépôt constitué par build_repo.sh,
