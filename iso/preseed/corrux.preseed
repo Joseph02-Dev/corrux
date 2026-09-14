@@ -34,16 +34,31 @@ d-i mirror/http/hostname string
 d-i mirror/http/directory string /
 choose-mirror-bin mirror/http/proxy string
 
-# Partitionnement : disque système entier, LVM, un seul volume racine.
-# Le second volume (support de sauvegarde, §11.1 architecture) est
-# volontairement HORS de ce preseed : corrux-setup le détecte et le
-# monte lui-même (logique déjà écrite et testée dans le dépôt
-# applicatif, ops/setup_service.py) — ne pas dupliquer cette décision
-# ici au niveau OS.
-d-i partman-auto/method string lvm
+# Désactive l'éjection du support pendant l'installation. Sans cette
+# directive, apt-setup/base-installer tentent d'éjecter puis
+# d'attendre la réinsertion du disque pour vérifier le jeu de
+# cédéroms — un cycle qui ne peut jamais aboutir sous une VM sans
+# tiroir physique. Blocage réel constaté (BUILD-005) : l'installation
+# restait figée indéfiniment juste après l'écriture de la liste de
+# sources apt, sans aucune activité supplémentaire.
+d-i cdrom-detect/eject boolean false
+
+# Enregistrement explicite du support d'installation (DVD-1) comme
+# source apt — sans cette directive, en priority=critical, l'ajout
+# automatique du disque comme source n'est pas garanti.
+d-i apt-setup/cdrom/set-first boolean true
+d-i apt-setup/cdrom/set-next boolean false
+d-i apt-setup/cdrom/set-failed boolean false
+
+# Partitionnement : disque système entier, partitionnement standard
+# (pas de LVM — inutile pour un serveur mono-disque, cf. absence de
+# toute exigence LVM dans l'architecture). Le second volume (support
+# de sauvegarde, §11.1 architecture) est volontairement HORS de ce
+# preseed : corrux-setup le détecte et le monte lui-même (logique déjà
+# écrite et testée dans le dépôt applicatif, ops/setup_service.py) —
+# ne pas dupliquer cette décision ici au niveau OS.
+d-i partman-auto/method string regular
 d-i partman-auto/choose_recipe select atomic
-d-i partman-lvm/confirm boolean true
-d-i partman-lvm/confirm_nooverwrite boolean true
 d-i partman/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
 d-i partman/confirm boolean true

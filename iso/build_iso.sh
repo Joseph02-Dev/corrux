@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
-# CORRUX — assemblage de l'ISO serveur bootable (BUILD-003, prototype).
+# CORRUX — assemblage de l'ISO serveur bootable (BUILD-003, prototype ;
+# base DVD-1 depuis BUILD-005).
 #
 # Principe : ne modifie JAMAIS la chaîne de boot officielle Debian
-# (isolinux/grub-efi/shim tels que fournis par l'image netinst) —
-# on ajoute uniquement : un preseed, un mini-dépôt local, la clé
-# publique de confiance CORRUX. Ceci préserve Secure Boot (cf.
-# BUILD-002, décision C2 confirmée par le produit).
+# (isolinux/grub-efi/shim tels que fournis par l'image DVD) — on
+# ajoute uniquement : un preseed, un mini-dépôt local, la clé publique
+# de confiance CORRUX. Ceci préserve Secure Boot (cf. BUILD-002,
+# décision C2 confirmée par le produit).
+#
+# Base DVD-1 (pas netinst) — décision BUILD-005 : une image netinst ne
+# contient qu'un socle minimal et dépend du réseau pour le système de
+# base (noyau, initramfs-tools, etc.), ce qui contredit directement
+# l'exigence « aucune dépendance à un miroir Internet pendant
+# l'installation » (architecture-technique-v1.md §4, mis à jour en
+# conséquence). Constaté empiriquement : cascade d'échecs <ERR> sur
+# busybox/initramfs-tools/linux-base/etc. avec le mirroir réseau
+# désactivé et une base netinst. L'image DVD-1 embarque l'ensemble des
+# paquets nécessaires à une installation standard, sans réseau.
 #
 # Usage :
 #   CORRUX_TECH_PASSWORD_HASH='$6$...'  \
@@ -16,6 +27,12 @@
 # par variable d'environnement (déjà chiffré, jamais en clair), la clé
 # publique de release est un fichier fourni explicitement (jamais
 # générée ni devinée par ce script).
+#
+# Espace disque : l'image DVD-1 (~4 Go) est volumineuse. Pour limiter
+# le pic d'usage disque pendant le build (source + extraction +
+# ISO finale simultanément), le cache de la source est supprimé après
+# extraction — un nouveau build retélécharge la source (réseau rapide
+# généralement, coût accepté au profit de l'espace disque).
 
 set -euo pipefail
 
@@ -34,20 +51,20 @@ OUT_ISO="${WORK_DIR}/corrux-server-${VERSION}.iso"
 
 mkdir -p "${CACHE_DIR}" "${EXTRACT_DIR}" "${REPO_DIR}"
 
-# --- 1. Récupération (mise en cache) de l'image Debian 13 netinst officielle ---
+# --- 1. Récupération de l'image Debian 13 DVD-1 officielle ---
 
-BASE_URL="https://cdimage.debian.org/debian-cd/current/amd64/iso-cd"
+BASE_URL="https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd"
 ISO_LISTING=$(curl -s --max-time 20 "${BASE_URL}/")
-ISO_NAME=$(echo "${ISO_LISTING}" | grep -o "debian-${DEBIAN_VERSION_SERIES}\.[0-9]*\.[0-9]*-amd64-netinst\.iso" | head -1)
+ISO_NAME=$(echo "${ISO_LISTING}" | grep -o "debian-${DEBIAN_VERSION_SERIES}\.[0-9]*\.[0-9]*-amd64-DVD-1\.iso" | head -1)
 if [ -z "${ISO_NAME}" ]; then
-    echo "[build_iso] Impossible de déterminer le nom de l'ISO Debian ${DEBIAN_VERSION_SERIES} officielle." >&2
+    echo "[build_iso] Impossible de déterminer le nom de l'ISO DVD-1 Debian ${DEBIAN_VERSION_SERIES} officielle." >&2
     exit 1
 fi
 BASE_ISO="${CACHE_DIR}/${ISO_NAME}"
 
 if [ ! -f "${BASE_ISO}" ]; then
-    echo "[build_iso] Téléchargement de ${ISO_NAME}..."
-    curl -sL --max-time 600 -o "${BASE_ISO}.part" "${BASE_URL}/${ISO_NAME}"
+    echo "[build_iso] Téléchargement de ${ISO_NAME} (~4 Go, peut prendre plusieurs minutes)..."
+    curl -sL --max-time 900 -o "${BASE_ISO}.part" "${BASE_URL}/${ISO_NAME}"
     mv "${BASE_ISO}.part" "${BASE_ISO}"
 else
     echo "[build_iso] ISO officielle déjà en cache : ${BASE_ISO}"
@@ -71,6 +88,11 @@ echo "[build_iso] Intégrité de l'image Debian officielle confirmée."
 echo "[build_iso] Extraction de l'image de base..."
 rm -rf "${EXTRACT_DIR:?}"/*
 xorriso -osirrox on -indev "${BASE_ISO}" -extract / "${EXTRACT_DIR}" >/dev/null
+
+# Libère l'espace du cache source (~4 Go) avant l'étape de
+# réassemblage, qui a besoin de coexister avec l'arborescence extraite
+# ET l'ISO finale — voir note d'espace disque en tête de fichier.
+rm -f "${BASE_ISO}"
 
 # --- 3. Constitution du dépôt local CORRUX ---
 

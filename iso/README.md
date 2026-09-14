@@ -34,8 +34,8 @@ Produit `<répertoire_de_travail>/corrux-server-<version>.iso` et son
 
 ## Ce que fait le script
 
-1. Télécharge (et met en cache) l'image Debian 13 netinst officielle,
-   vérifie son intégrité contre `SHA256SUMS` officiel.
+1. Télécharge (et met en cache) l'image Debian 13 **DVD-1** officielle
+   (~4 Go), vérifie son intégrité contre `SHA256SUMS` officiel.
 2. Extrait l'image.
 3. Reconstruit les 3 paquets `.deb` CORRUX à partir du code du dépôt
    (réutilise `packaging/build_packages.py`, TECH-043 — aucune
@@ -60,6 +60,30 @@ Produit `<répertoire_de_travail>/corrux-server-<version>.iso` et son
 - Détermination du compte administrateur CORRUX applicatif : reste
   entièrement à la charge de `corrux-setup`, exécuté au premier
   démarrage — ce mécanisme ne configure que l'OS.
+
+## BUILD-005 — Décision : image DVD-1 au lieu de netinst
+
+Constat empirique (test de boot réel, QEMU) : avec le mirroir réseau
+Debian désactivé (mode offline garanti) et une base **netinst**,
+l'installation échoue en cascade sur les paquets du système de base
+(`initramfs-tools`, `linux-base`, `busybox`, `zstd`, `apparmor`...) —
+une image netinst ne contient qu'un socle minimal et dépend
+structurellement du réseau pour le reste. C'est incompatible avec
+l'exigence produit « aucune dépendance à un miroir Internet pendant
+l'installation ».
+
+**Décision** : base **DVD-1** (`iso-dvd`, pas `iso-cd`/netinst) — elle
+embarque l'ensemble des paquets nécessaires à une installation
+standard sans réseau. Le mécanisme de preseed, le dépôt local CORRUX
+et l'assemblage restent inchangés ; seule la source de l'image de
+base change.
+
+**⚠ Mise à jour externe requise** : `architecture-technique-v1.md` §4
+(document de référence du projet, hors du dépôt Git) mentionne encore
+« image Debian netinst standard ». Cette décision de BUILD-005 la
+remplace par « image Debian DVD-1 » — à répercuter dans le document
+de référence, cette mise à jour n'étant pas dans le périmètre
+d'écriture de ce dépôt.
 
 ## BUILD-004 — Test de boot réel (état honnête)
 
@@ -86,16 +110,43 @@ au-delà (réseau, horloge, chargement des composants LVM) dans
 l'environnement de test.
 
 **Ce qui n'a PAS pu être prouvé dans ce sandbox** : un cycle complet
-d'installation automatisée jusqu'à son terme. L'environnement de
+d'installation automatisée jusqu'à son terme.
+
+### BUILD-005 — correctifs supplémentaires et limite atteinte
+
+Deux correctifs de plus ont été identifiés en poursuivant le test :
+
+3. **`apt-setup/cdrom/set-first true`** — enregistrement explicite du
+   support comme source apt : en `priority=critical`, l'ajout
+   automatique n'est pas garanti.
+4. **`cdrom-detect/eject false`** — blocage réel constaté :
+   l'installation restait **totalement figée** (deux segments de test
+   consécutifs sans la moindre nouvelle ligne de log ni activité
+   écran) juste après l'écriture de la liste de sources apt.
+   `apt-setup` tente d'éjecter puis d'attendre la réinsertion du
+   disque pour vérifier le jeu de cédéroms — un cycle qui ne peut
+   jamais aboutir sous une VM sans tiroir physique.
+
+Le partitionnement est également passé de LVM à standard (`regular`) :
+LVM n'apporte rien sur un serveur mono-disque et n'est exigé nulle
+part dans l'architecture.
+
+**Note de méthode importante** : le marqueur `<ERR>` visible dans
+l'interface texte de l'installeur s'est révélé être un **faux
+positif**. L'analyse du syslog réel (via `log_host=`) montre que les
+paquets concernés (`busybox`, `apparmor`, `linux-image-amd64`...) se
+téléchargent et se configurent **avec succès**. Ne pas se fier au
+marqueur `<ERR>` de l'écran pour diagnostiquer : utiliser le syslog.
+
+**Limite de l'environnement, assumée** : l'environnement de
 développement utilisé ne dispose d'aucune accélération matérielle de
-virtualisation (`/dev/kvm` absent), et son mécanisme d'exécution de
-commandes impose une limite de durée par appel qui s'est révélée
-inférieure au temps nécessaire à une installation Debian complète en
-émulation logicielle pure (1 vCPU). Comme `debian-installer` ne
-reprend jamais une installation interrompue, chaque essai tronqué
-recommençait entièrement — un test de bout en bout réel nécessite un
-environnement avec accélération matérielle (KVM réel ou machine
-physique), hors périmètre de ce sandbox.
+virtualisation (`/dev/kvm` absent) et impose une limite de durée
+d'exécution par commande inférieure au temps nécessaire à une
+installation Debian complète en émulation logicielle pure (1 vCPU).
+Chaque itération d'hypothèse coûtait ~35 minutes, ce qui ne converge
+pas. **La validation d'un cycle complet doit être faite dans un
+environnement avec KVM** (voir `iso/test_boot/`), pas par des tests
+manuels segmentés.
 
 ## Sécurité
 

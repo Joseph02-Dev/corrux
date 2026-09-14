@@ -56,6 +56,43 @@ def test_build_iso_script_injects_early_language_country_locale_params():
     assert "debian-installer/locale=en_US.UTF-8" in content
 
 
+def test_preseed_disables_cdrom_eject():
+    # Blocage réel constaté (BUILD-005) : sans cette directive,
+    # l'installation se fige indéfiniment après l'écriture de la liste
+    # de sources apt (cycle éjecter/réinsérer impossible en VM).
+    content = (ISO_DIR / "preseed" / "corrux.preseed").read_text()
+    assert "cdrom-detect/eject boolean false" in content
+
+
+def test_preseed_registers_install_media_as_apt_source():
+    content = (ISO_DIR / "preseed" / "corrux.preseed").read_text()
+    assert "apt-setup/cdrom/set-first boolean true" in content
+
+
+def test_build_iso_uses_dvd_not_netinst():
+    # Décision BUILD-005 : netinst ne peut pas installer le système de
+    # base sans miroir réseau, ce qui contredit l'exigence offline.
+    content = (ISO_DIR / "build_iso.sh").read_text()
+    assert "iso-dvd" in content
+    assert "DVD-1" in content
+
+
+def test_kvm_install_test_script_requires_hardware_acceleration():
+    # Le test d'installation doit refuser de tourner sans KVM plutôt
+    # que de partir dans un run de plusieurs heures (leçon BUILD-005).
+    content = (ISO_DIR / "test_boot" / "run_install_test.sh").read_text()
+    assert "/dev/kvm" in content
+    assert "-accel kvm" in content
+
+
+def test_kvm_install_test_verifies_packages_on_disk_not_installer_output():
+    # Leçon BUILD-005 : le marqueur <ERR> de l'interface texte est un
+    # faux positif — la vérification doit porter sur le disque produit.
+    content = (ISO_DIR / "test_boot" / "run_install_test.sh").read_text()
+    assert "dpkg-query" in content
+    assert "corrux-core" in content
+
+
 def test_build_iso_script_requires_password_hash_env_var(tmp_path):
     env_without_hash = {"PATH": "/usr/bin:/bin"}
     result = subprocess.run(
