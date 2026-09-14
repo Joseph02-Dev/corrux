@@ -10,6 +10,7 @@ Le test de bout en bout réel (téléchargement + assemblage + boot VM)
 est un ticket distinct (BUILD-004), hors périmètre de cette suite.
 """
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -91,6 +92,56 @@ def test_kvm_install_test_verifies_packages_on_disk_not_installer_output():
     content = (ISO_DIR / "test_boot" / "run_install_test.sh").read_text()
     assert "dpkg-query" in content
     assert "corrux-core" in content
+
+
+def test_password_injection_is_literal_not_sed():
+    # Bug critique trouvé en revue de code : `sed s|token|$HASH|`
+    # interprète `&` comme « le motif trouvé », ce qui corrompt
+    # silencieusement un hash contenant ce caractère (mot de passe
+    # technicien inutilisable, sans aucune erreur). Le remplacement
+    # doit être strictement littéral.
+    content = (ISO_DIR / "build_iso.sh").read_text()
+    assert "sed \"s|__CORRUX_TECH_PASSWORD_HASH__|" not in content
+    assert "ENVIRON[\"CORRUX_TECH_PASSWORD_HASH\"]" in content
+
+
+def test_password_injection_handles_ampersand(tmp_path):
+    """Test fonctionnel : un hash contenant `&` doit être injecté tel quel."""
+    preseed = tmp_path / "sample.preseed"
+    preseed.write_text(
+        "d-i passwd/user-password-crypted password __CORRUX_TECH_PASSWORD_HASH__\n"
+    )
+    tricky_hash = "$6$ab&cd$ef&gh"
+
+    # Réutilise exactement le programme awk du script de build.
+    build_script = (ISO_DIR / "build_iso.sh").read_text()
+    start = build_script.index("awk '\n    BEGIN { token")
+    awk_program = build_script[start + len("awk '") :].split("'", 1)[0]
+
+    result = subprocess.run(
+        ["awk", awk_program, str(preseed)],
+        env={**os.environ, "CORRUX_TECH_PASSWORD_HASH": tricky_hash},
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert tricky_hash in result.stdout
+    assert "__CORRUX_TECH_PASSWORD_HASH__" not in result.stdout
+
+
+def test_build_iso_fails_when_no_boot_entry_patched():
+    # Sans ce garde-fou, un changement de chemin côté Debian
+    # produirait une ISO sans preseed, sans aucun signal au build.
+    content = (ISO_DIR / "build_iso.sh").read_text()
+    assert "BOOT_ENTRIES_PATCHED" in content
+    assert 'if [ "${BOOT_ENTRIES_PATCHED}" -eq 0 ]' in content
+
+
+def test_download_uses_curl_fail_flag():
+    # Sans --fail, une page d'erreur HTTP serait écrite dans le .iso.
+    content = (ISO_DIR / "build_iso.sh").read_text()
+    assert "curl -fsSL" in content
 
 
 def test_build_iso_script_requires_password_hash_env_var(tmp_path):

@@ -64,7 +64,15 @@ BASE_ISO="${CACHE_DIR}/${ISO_NAME}"
 
 if [ ! -f "${BASE_ISO}" ]; then
     echo "[build_iso] Téléchargement de ${ISO_NAME} (~4 Go, peut prendre plusieurs minutes)..."
-    curl -sL --max-time 900 -o "${BASE_ISO}.part" "${BASE_URL}/${ISO_NAME}"
+    # --fail : une réponse HTTP d'erreur (404, 500...) doit faire
+    # échouer curl, sinon la page d'erreur serait écrite dans le .part
+    # puis renommée en .iso (le checksum le rattraperait, mais avec un
+    # message trompeur). Relevé en revue de code.
+    if ! curl -fsSL --max-time 900 -o "${BASE_ISO}.part" "${BASE_URL}/${ISO_NAME}"; then
+        rm -f "${BASE_ISO}.part"
+        echo "[build_iso] ÉCHEC : téléchargement de ${ISO_NAME} impossible." >&2
+        exit 1
+    fi
     mv "${BASE_ISO}.part" "${BASE_ISO}"
 else
     echo "[build_iso] ISO officielle déjà en cache : ${BASE_ISO}"
@@ -89,10 +97,16 @@ echo "[build_iso] Extraction de l'image de base..."
 rm -rf "${EXTRACT_DIR:?}"/*
 xorriso -osirrox on -indev "${BASE_ISO}" -extract / "${EXTRACT_DIR}" >/dev/null
 
-# Libère l'espace du cache source (~4 Go) avant l'étape de
-# réassemblage, qui a besoin de coexister avec l'arborescence extraite
-# ET l'ISO finale — voir note d'espace disque en tête de fichier.
-rm -f "${BASE_ISO}"
+# Libère l'espace du cache source (~4 Go) : le réassemblage doit
+# coexister avec l'arborescence extraite ET l'ISO finale. Sur une
+# machine disposant d'espace, CORRUX_KEEP_CACHE=1 conserve la source
+# pour éviter un retéléchargement au build suivant (point relevé en
+# revue de code) — voir note d'espace disque en tête de fichier.
+if [ "${CORRUX_KEEP_CACHE:-0}" = "1" ]; then
+    echo "[build_iso] Cache source conservé (CORRUX_KEEP_CACHE=1) : ${BASE_ISO}"
+else
+    rm -f "${BASE_ISO}"
+fi
 
 # --- 3. Constitution du dépôt local CORRUX ---
 
@@ -112,9 +126,27 @@ cp "${PUBKEY_PATH}" "${EXTRACT_DIR}/corrux-release-public-key.asc"
 # --- 5. Preseed (mot de passe technicien injecté depuis l'environnement) ---
 
 echo "[build_iso] Injection du preseed..."
-sed "s|__CORRUX_TECH_PASSWORD_HASH__|${CORRUX_TECH_PASSWORD_HASH}|" \
-    "${PROJECT_ROOT}/iso/preseed/corrux.preseed" \
-    > "${EXTRACT_DIR}/corrux.preseed"
+# Remplacement LITTÉRAL du jeton. On n'utilise volontairement pas
+# `sed s|...|${HASH}|` : sed interprète `&` (= le motif trouvé) et les
+# séquences `\1`, ce qui corromprait silencieusement un hash contenant
+# ces caractères — mot de passe technicien inutilisable, sans aucune
+# erreur affichée. Bug trouvé en revue de code (BUILD-005).
+# awk avec index/substr fait un remplacement strictement littéral.
+CORRUX_TECH_PASSWORD_HASH="${CORRUX_TECH_PASSWORD_HASH}" \
+awk '
+    BEGIN { token = "__CORRUX_TECH_PASSWORD_HASH__"; hash = ENVIRON["CORRUX_TECH_PASSWORD_HASH"] }
+    {
+        line = $0
+        out = ""
+        while ((pos = index(line, token)) > 0) {
+            out = out substr(line, 1, pos - 1) hash
+            line = substr(line, pos + length(token))
+            replaced = 1
+        }
+        print out line
+    }
+    END { if (!replaced) { print "[build_iso] ÉCHEC : jeton de mot de passe introuvable dans le preseed." > "/dev/stderr"; exit 1 } }
+' "${PROJECT_ROOT}/iso/preseed/corrux.preseed" > "${EXTRACT_DIR}/corrux.preseed"
 
 # Ajout des paramètres de boot preseed sur les entrées par défaut
 # (isolinux BIOS + grub UEFI), sans toucher au reste de la chaîne de
@@ -132,15 +164,35 @@ sed "s|__CORRUX_TECH_PASSWORD_HASH__|${CORRUX_TECH_PASSWORD_HASH}|" \
 # only be preseeded using the kernel boot parameters »).
 D_I_BOOT_PARAMS="auto=true priority=critical debian-installer/language=en debian-installer/country=US debian-installer/locale=en_US.UTF-8 file=/cdrom/corrux.preseed"
 
+# Chaque patch est vérifié : si Debian change l'emplacement ou le
+# format de ces fichiers, l'ISO se construirait sans preseed et
+# l'installation redeviendrait interactive — sans aucun signal au
+# moment du build. On échoue ici plutôt que de livrer une ISO
+# silencieusement inutilisable (point relevé en revue de code).
+BOOT_ENTRIES_PATCHED=0
+
 if [ -f "${EXTRACT_DIR}/isolinux/txt.cfg" ]; then
-    sed -i \
-        "s|append |append ${D_I_BOOT_PARAMS} |" \
-        "${EXTRACT_DIR}/isolinux/txt.cfg"
+    sed -i "s|append |append ${D_I_BOOT_PARAMS} |" "${EXTRACT_DIR}/isolinux/txt.cfg"
+    if grep -q "file=/cdrom/corrux.preseed" "${EXTRACT_DIR}/isolinux/txt.cfg"; then
+        BOOT_ENTRIES_PATCHED=$((BOOT_ENTRIES_PATCHED + 1))
+        echo "[build_iso]   ✓ entrée de boot BIOS (isolinux) patchée"
+    fi
 fi
+
 if [ -f "${EXTRACT_DIR}/boot/grub/grub.cfg" ]; then
-    sed -i \
-        "s|linux    /install.amd/vmlinuz|linux    /install.amd/vmlinuz ${D_I_BOOT_PARAMS}|" \
+    sed -i "s|linux    /install.amd/vmlinuz|linux    /install.amd/vmlinuz ${D_I_BOOT_PARAMS}|" \
         "${EXTRACT_DIR}/boot/grub/grub.cfg"
+    if grep -q "file=/cdrom/corrux.preseed" "${EXTRACT_DIR}/boot/grub/grub.cfg"; then
+        BOOT_ENTRIES_PATCHED=$((BOOT_ENTRIES_PATCHED + 1))
+        echo "[build_iso]   ✓ entrée de boot UEFI (grub) patchée"
+    fi
+fi
+
+if [ "${BOOT_ENTRIES_PATCHED}" -eq 0 ]; then
+    echo "[build_iso] ÉCHEC : aucune entrée de boot n'a pu être patchée avec le preseed.
+L'ISO produite démarrerait en mode interactif. Vérifier que l'image de
+base contient bien isolinux/txt.cfg et/ou boot/grub/grub.cfg." >&2
+    exit 1
 fi
 
 # --- 6. Régénération de md5sum.txt (contrôle d'intégrité debian-installer) ---
