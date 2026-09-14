@@ -36,6 +36,21 @@ VM_CPUS="${CORRUX_TEST_VM_CPUS:-2}"
 # une machine lente.
 TIMEOUT_SECONDS="${CORRUX_TEST_TIMEOUT:-3600}"
 
+# Le disque de test pèse plusieurs Go : il est supprimé en cas de
+# succès, mais CONSERVÉ en cas d'échec pour permettre le diagnostic
+# (inspection du disque, relecture du serial.log). CORRUX_TEST_KEEP=1
+# le conserve dans tous les cas. Point relevé en revue de code : sans
+# cela, chaque exécution laissait un disque orphelin.
+cleanup() {
+    local rc=$?
+    if [ "${rc}" -eq 0 ] && [ "${CORRUX_TEST_KEEP:-0}" != "1" ]; then
+        rm -f "${DISK}"
+    elif [ "${rc}" -ne 0 ]; then
+        echo "[test_boot] Artefacts conservés pour diagnostic : ${WORK_DIR}" >&2
+    fi
+}
+trap cleanup EXIT
+
 fail() { echo "[test_boot] ÉCHEC : $*" >&2; exit 1; }
 
 # --- Prérequis -------------------------------------------------------
@@ -106,4 +121,6 @@ guestfish --ro -a "${DISK}" -i exists /etc/systemd/system/multi-user.target.want
     || echo "[test_boot]   (avertissement : corrux-core.service non activé — à confirmer, corrux-setup s'exécute au premier démarrage)"
 
 echo "[test_boot] SUCCÈS : installation automatisée complète et paquets CORRUX présents."
-echo "[test_boot] Disque de test : ${DISK}"
+if [ "${CORRUX_TEST_KEEP:-0}" = "1" ]; then
+    echo "[test_boot] Disque de test conservé (CORRUX_TEST_KEEP=1) : ${DISK}"
+fi

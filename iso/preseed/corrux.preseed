@@ -15,6 +15,13 @@
 # (crypt SHA-512) fourni explicitement par la personne qui construit
 # l'ISO — jamais un mot de passe en clair, jamais une valeur inventée
 # ou par défaut ici.
+#
+# ⚠ Le hash substitué est LISIBLE dans l'ISO produite (contrainte
+# inhérente au mécanisme preseed : debian-installer doit pouvoir le
+# lire). Quiconque possède l'ISO peut donc tenter un cassage hors
+# ligne du mot de passe technicien. Utiliser un mot de passe fort,
+# traiter l'ISO comme un support sensible, et changer ce mot de passe
+# après installation — cf. section Sécurité de iso/README.md.
 
 # Localisation
 d-i debian-installer/locale string fr_FR.UTF-8

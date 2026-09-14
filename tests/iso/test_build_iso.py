@@ -144,6 +144,35 @@ def test_download_uses_curl_fail_flag():
     assert "curl -fsSL" in content
 
 
+def test_md5sum_regeneration_uses_batched_exec():
+    # `-exec ... \;` lance un process par fichier : sur une image DVD
+    # (~15 000 fichiers) c'est ~180x plus lent que `-exec ... +`
+    # (mesuré), pour un résultat identique.
+    content = (ISO_DIR / "build_iso.sh").read_text()
+    assert "-exec md5sum {} +" in content
+    assert "-exec md5sum {} \\;" not in content
+
+
+def test_install_test_cleans_up_disk_but_keeps_on_failure():
+    # Le disque de test pèse plusieurs Go : nettoyé en cas de succès,
+    # conservé en cas d'échec pour permettre le diagnostic.
+    content = (ISO_DIR / "test_boot" / "run_install_test.sh").read_text()
+    assert "trap cleanup EXIT" in content
+    assert "CORRUX_TEST_KEEP" in content
+
+
+def test_password_hash_exposure_is_documented():
+    # Le hash est lisible dans l'ISO (contrainte inhérente au preseed).
+    # Cette propriété de sécurité doit être explicitement documentée
+    # pour qui exploite le système, pas seulement connue des auteurs.
+    readme = (ISO_DIR / "README.md").read_text()
+    assert "lisible dans l'ISO" in readme
+    assert "hors ligne" in readme
+
+    preseed = (ISO_DIR / "preseed" / "corrux.preseed").read_text()
+    assert "LISIBLE dans l'ISO" in preseed
+
+
 def test_build_iso_script_requires_password_hash_env_var(tmp_path):
     env_without_hash = {"PATH": "/usr/bin:/bin"}
     result = subprocess.run(

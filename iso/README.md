@@ -157,3 +157,32 @@ manuels segmentés.
 - Le compte technicien créé par le preseed n'est **pas** root (accès
   sudo uniquement) — cohérent avec le principe « pas d'exécution en
   root » (architecture-technique-v1.md §16).
+
+### ⚠ Le hash du mot de passe technicien est lisible dans l'ISO
+
+C'est **inhérent au mécanisme preseed de Debian**, pas un défaut de ce
+script : `debian-installer` doit pouvoir lire le hash en clair au
+moment de créer le compte. Conséquence pratique à connaître :
+
+> **Quiconque possède une copie de l'ISO peut en extraire le hash et
+> tenter de le casser hors ligne**, sans limite de tentatives ni
+> verrouillage.
+
+Mesures recommandées :
+
+1. **Mot de passe technicien fort** (long et aléatoire) — un mot de
+   passe faible sera cassé rapidement une fois le hash extrait.
+   `openssl passwd -6` utilise SHA-512 crypt, résistant mais pas
+   magique face à un mot de passe court.
+2. **Traiter l'ISO comme un support sensible** : ne pas la publier ni
+   la laisser sur un partage ouvert.
+3. **Changer le mot de passe technicien après installation**
+   (`passwd corrux-tech` sur le serveur), ce qui rend le hash de l'ISO
+   caduc.
+4. **Une ISO par client** plutôt qu'une ISO générique réutilisée : un
+   hash compromis n'expose alors qu'une seule installation.
+
+Le compte administrateur CORRUX applicatif n'est **pas** concerné : il
+est créé interactivement par `corrux-setup` au premier démarrage, son
+mot de passe n'existe nulle part dans l'ISO.
+
