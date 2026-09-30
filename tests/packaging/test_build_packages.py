@@ -72,14 +72,16 @@ def built_packages(tmp_path_factory):
 
 @pytest.fixture
 def installed_packages(built_packages):
-    """Installe réellement les 3 paquets (--force-depends : la
-    résolution stricte de dépendances Debian échoue nécessairement dans
-    ce bac à sable basé sur pip, pas les paquets système — signalé, pas
-    masqué) et les désinstalle systématiquement, même en cas d'échec du
+    """Dépaquète réellement les 3 paquets (`dpkg --unpack` : fichiers
+    installés, scripts de configuration NON exécutés — le postinst
+    provisionne le système hôte (compte, venv, PostgreSQL) et est
+    couvert de bout en bout en conteneur par
+    packaging/test_install/container_test.sh, jamais sur la machine de
+    test) et les désinstalle systématiquement, même en cas d'échec du
     test. Jamais /opt/corrux laissé derrière."""
     for name in PACKAGE_NAMES:
         subprocess.run(
-            ["dpkg", "-i", "--force-depends", str(built_packages[name])],
+            ["dpkg", "--unpack", "--force-depends", str(built_packages[name])],
             capture_output=True, text=True, check=True,
         )
     try:
@@ -123,6 +125,60 @@ class TestPackageStructure:
         )
         assert "Package: corrux-core" in result.stdout
         assert f"Version: {VERSION}" in result.stdout
+        assert "Architecture: amd64" in result.stdout
+
+    def test_corrux_core_depends_only_on_packages_common_to_all_supported_systems(
+        self, built_packages
+    ):
+        """Debian 12/13, Ubuntu 22.04/24.04, Proxmox VE 8/9 : aucune
+        dépendance vers une bibliothèque Python de la distribution
+        (versions divergentes) — elles sont embarquées (venv)."""
+        from packaging.build_packages import CORRUX_CORE_DEPENDS
+
+        assert "python3 (>= 3.10)" in CORRUX_CORE_DEPENDS
+        assert not any(dep.startswith("python3-django") for dep in CORRUX_CORE_DEPENDS)
+        for required in ("python3-venv", "postgresql (>= 14)", "nginx", "gnupg", "openssl"):
+            assert required in CORRUX_CORE_DEPENDS
+
+    def test_files_under_etc_are_declared_as_conffiles(self, built_packages, tmp_path):
+        subprocess.run(
+            ["dpkg-deb", "--control", str(built_packages["corrux-core"]), str(tmp_path)],
+            check=True,
+        )
+        conffiles = (tmp_path / "conffiles").read_text().split()
+        assert conffiles == ["/etc/nginx/sites-available/corrux.conf"]
+
+    def test_corrux_core_ships_its_maintainer_scripts_and_admin_commands(
+        self, built_packages, tmp_path
+    ):
+        subprocess.run(
+            ["dpkg-deb", "--control", str(built_packages["corrux-core"]), str(tmp_path)],
+            check=True,
+        )
+        for script in ("postinst", "prerm", "postrm"):
+            assert os.access(tmp_path / script, os.X_OK), script
+        contents = subprocess.run(
+            ["dpkg-deb", "--contents", str(built_packages["corrux-core"])],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "./usr/lib/corrux/common.sh" in contents
+        assert "./usr/sbin/corrux-setup" in contents
+        assert "./usr/sbin/corrux-manage" in contents
+        assert f"./{INSTALL_PREFIX.lstrip('/')}/requirements.txt" in contents
+
+    def test_wheelhouse_is_embedded_when_provided(self, tmp_path):
+        wheelhouse = tmp_path / "wheels"
+        wheelhouse.mkdir()
+        (wheelhouse / "demo-1.0-py3-none-any.whl").write_bytes(b"wheel")
+        output_dir = tmp_path / "out"
+        output_dir.mkdir()
+        deb = build_deb_package(
+            build_corrux_core_spec(VERSION, wheelhouse), PROJECT_ROOT, output_dir
+        )
+        contents = subprocess.run(
+            ["dpkg-deb", "--contents", str(deb)], capture_output=True, text=True, check=True,
+        ).stdout
+        assert "./opt/corrux/wheels/demo-1.0-py3-none-any.whl" in contents
 
     def test_modules_depend_on_corrux_core(self, built_packages):
         for name in ("corrux-module-documentation", "corrux-module-rh"):
@@ -167,26 +223,41 @@ class TestPackageStructure:
         assert "./lib/systemd/system/corrux-cert-check.timer" in result.stdout
         assert "./etc/nginx/sites-available/corrux.conf" in result.stdout
 
-    def test_corrux_core_depends_on_gunicorn(self, built_packages):
-        """corrux-core.service (§5) exige un serveur WSGI de production
-        — gap trouvé et corrigé lors de la revue de procédure TECH-044,
-        corrux-core.service n'ayant été construit par aucun ticket
-        précédent."""
-        result = subprocess.run(
-            ["dpkg-deb", "--info", str(built_packages["corrux-core"])],
-            capture_output=True, text=True, check=True,
-        )
-        assert "gunicorn" in result.stdout
+    def test_gunicorn_is_part_of_the_embedded_environment(self):
+        """corrux-core.service (§5) exige un serveur WSGI de production :
+        gunicorn fait partie des dépendances embarquées (venv)."""
+        requirements = (PROJECT_ROOT / "requirements.txt").read_text()
+        assert "gunicorn==" in requirements
 
-    def test_postinst_never_starts_a_service_or_creates_a_system_user(self):
-        """Décision confirmée à l'audit Phase 1 : postinst
-        volontairement minimal — jamais de useradd/systemctl start,
-        seulement daemon-reload."""
-        from packaging.build_packages import _POSTINST_CONTENT
+    def test_package_scripts_never_start_or_enable_a_service(self):
+        """Seul corrux-setup met CORRUX en service : les scripts du
+        paquet ne démarrent ni n'activent jamais un service (seul un
+        corrux-core DÉJÀ actif est redémarré lors d'une mise à jour)."""
+        debian_dir = PROJECT_ROOT / "packaging" / "debian"
+        for name in ("common.sh", "corrux-core.postinst", "corrux-module.postinst"):
+            content = (debian_dir / name).read_text()
+            assert "systemctl start" not in content, name
+            assert "systemctl enable" not in content, name
+        common = (debian_dir / "common.sh").read_text()
+        assert "systemctl is-active --quiet corrux-core.service" in common
 
-        assert "useradd" not in _POSTINST_CONTENT
-        assert "systemctl start" not in _POSTINST_CONTENT
-        assert "systemctl enable" not in _POSTINST_CONTENT
+    def test_venv_is_built_offline_from_the_embedded_wheels(self):
+        common = (PROJECT_ROOT / "packaging" / "debian" / "common.sh").read_text()
+        assert "--no-index" in common
+        assert '--find-links "$CORRUX_WHEELHOUSE"' in common
+
+    def test_secrets_are_generated_once_and_never_overwritten(self):
+        common = (PROJECT_ROOT / "packaging" / "debian" / "common.sh").read_text()
+        ensure_env = common.split("corrux_ensure_env() {", 1)[1].split("\n}\n", 1)[0]
+        assert 'if [ -f "$CORRUX_ENV_FILE" ]; then\n        return 0' in ensure_env
+        assert 'chmod 0640 "$CORRUX_ENV_FILE"' in ensure_env
+
+    def test_metapackage_pins_all_packages_to_the_same_version(self):
+        from packaging.build_packages import build_corrux_metapackage_spec
+
+        spec = build_corrux_metapackage_spec(VERSION)
+        assert spec.name == "corrux"
+        assert set(spec.depends) == {f"{name} (= {VERSION})" for name in PACKAGE_NAMES}
 
     def test_missing_source_directory_fails_explicitly(self, tmp_path):
         from packaging.build_packages import DirectoryMapping, PackageSpec
@@ -243,7 +314,7 @@ class TestSignedReleaseBundle:
     def test_bundle_contains_all_expected_files(self, signed_bundle):
         names = {p.name for p in signed_bundle.iterdir()}
         assert names == {
-            "corrux-core_1.0.0-test_all.deb",
+            "corrux-core_1.0.0-test_amd64.deb",
             "corrux-module-documentation_1.0.0-test_all.deb",
             "corrux-module-rh_1.0.0-test_all.deb",
             "update-manifest.yaml",
@@ -362,12 +433,15 @@ class TestSignedReleaseBundle:
 
 
 class TestRealInstallation:
-    def test_installation_succeeds_and_configures_cleanly(self, installed_packages):
-        result = subprocess.run(["dpkg", "-l", *PACKAGE_NAMES], capture_output=True, text=True)
+    def test_packages_unpack_cleanly(self, installed_packages):
+        """État « iU » (dépaqueté, non configuré) : la configuration
+        (postinst) est testée en conteneur, cf. fixture installed_packages."""
         for name in PACKAGE_NAMES:
-            assert f"ii  {name}" in result.stdout or f"ii {name}" in result.stdout.replace(
-                "  ", " "
-            )
+            status = subprocess.run(
+                ["dpkg-query", "-W", "-f=${db:Status-Abbrev}", name],
+                capture_output=True, text=True, check=True,
+            ).stdout.strip()
+            assert status == "iU", f"{name} : {status}"
 
     def test_files_land_at_the_expected_prefix(self, installed_packages):
         assert (Path(INSTALL_PREFIX) / "manage.py").exists()
@@ -416,7 +490,7 @@ class TestRealInstallation:
         préalable, pas une fuite de fichiers du paquet lui-même)."""
         for name in PACKAGE_NAMES:
             subprocess.run(
-                ["dpkg", "-i", "--force-depends", str(built_packages[name])],
+                ["dpkg", "--unpack", "--force-depends", str(built_packages[name])],
                 capture_output=True, text=True, check=True,
             )
         subprocess.run(

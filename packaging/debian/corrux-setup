@@ -1,0 +1,157 @@
+#!/bin/sh
+# corrux-setup — mise en service d'une instance CORRUX installée par apt.
+#
+# 1. S'assure que la base PostgreSQL locale et les migrations sont en
+#    place (rejoue les étapes du postinst si PostgreSQL n'était pas
+#    joignable à l'installation).
+# 2. Lance l'assistant applicatif `manage.py corrux_setup` (compte
+#    administrateur, certificat HTTPS, support de sauvegarde, modules)
+#    avec les chemins de l'installation packagée. Toute option est
+#    transmise telle quelle à l'assistant (mode scripté) :
+#       sudo corrux-setup --admin-username admin --backup-device-path /dev/sdb1 ...
+# 3. Écrit la configuration des services planifiés, active le site
+#    Nginx et démarre CORRUX.
+set -e
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "corrux-setup doit être exécuté en root (sudo corrux-setup)." >&2
+    exit 1
+fi
+
+. /usr/lib/corrux/common.sh
+
+TLS_DIR="${CORRUX_ETC}/tls"
+BACKUP_KEY="${CORRUX_ETC}/backup-gpg-public.key"
+DEFAULT_BACKUP_MOUNT=/srv/corrux-backup
+
+if [ -f "${TLS_DIR}/server.crt" ]; then
+    echo "CORRUX est déjà configuré sur cette machine (${TLS_DIR}/server.crt présent)." >&2
+    echo "Pour réinstaller : apt purge corrux-core, puis supprimer la base « corrux »." >&2
+    exit 1
+fi
+
+# --- 1. Base de données et migrations -----------------------------------------
+
+corrux_ensure_user
+corrux_ensure_dirs
+corrux_ensure_env
+corrux_load_env
+if corrux_database_is_local && ! corrux_postgres_ready; then
+    if [ -d /run/systemd/system ]; then
+        systemctl start postgresql.service || :
+    fi
+fi
+if ! corrux_ensure_database; then
+    echo "PostgreSQL est injoignable : démarrer le service puis relancer corrux-setup." >&2
+    exit 1
+fi
+corrux_apply_migrations_if_ready
+
+# --- 2. Paramètres propres à l'installation packagée --------------------------
+
+# Point de montage du support de sauvegarde : demandé ici (et non par
+# l'assistant) car il doit aussi être autorisé en écriture pour
+# corrux-backup.service. `--backup-mount-point` en option le fournit.
+BACKUP_MOUNT=""
+prev=""
+for arg in "$@"; do
+    case "$arg" in
+        --backup-mount-point=*) BACKUP_MOUNT="${arg#*=}" ;;
+    esac
+    if [ "$prev" = "--backup-mount-point" ]; then
+        BACKUP_MOUNT="$arg"
+    fi
+    prev="$arg"
+done
+if [ -z "$BACKUP_MOUNT" ]; then
+    printf "Point de montage du support de sauvegarde [%s] : " "$DEFAULT_BACKUP_MOUNT"
+    read -r BACKUP_MOUNT
+    BACKUP_MOUNT="${BACKUP_MOUNT:-$DEFAULT_BACKUP_MOUNT}"
+    set -- --backup-mount-point "$BACKUP_MOUNT" "$@"
+fi
+
+# Clé publique GPG de chiffrement des sauvegardes (jamais la clé privée :
+# celle-ci reste hors de la machine, cf. docs/sauvegarde-restauration.md).
+if [ ! -f "$BACKUP_KEY" ]; then
+    printf "Chemin de la clé PUBLIQUE GPG de chiffrement des sauvegardes : "
+    read -r key_source
+    if [ ! -f "$key_source" ]; then
+        echo "Fichier introuvable : ${key_source}" >&2
+        exit 1
+    fi
+    install -m 0644 -o root -g root "$key_source" "$BACKUP_KEY"
+fi
+
+corrux_manage corrux_setup \
+    --ca-key-path "${TLS_DIR}/ca.key" \
+    --ca-cert-path "${TLS_DIR}/ca.crt" \
+    --server-key-path "${TLS_DIR}/server.key" \
+    --server-cert-path "${TLS_DIR}/server.crt" \
+    --documentation-manifest-path "${CORRUX_PREFIX}/modules/documentation/manifest.yaml" \
+    --rh-manifest-path "${CORRUX_PREFIX}/modules/rh/manifest.yaml" \
+    --backup-storage-root "$CORRUX_STORAGE_ROOT" \
+    --backup-gpg-recipient-key-path "$BACKUP_KEY" \
+    --db-name "$DB_NAME" --db-user "$DB_USER" --db-password "$DB_PASSWORD" \
+    --db-host "$DB_HOST" --db-port "$DB_PORT" \
+    "$@"
+
+# --- 3. Services ------------------------------------------------------------
+
+# L'assistant s'exécute en root : les fichiers qu'il a créés sont rendus
+# au compte de service.
+chown -R "$CORRUX_USER:$CORRUX_USER" "$CORRUX_STORAGE_ROOT" "$BACKUP_MOUNT"
+chgrp "$CORRUX_USER" "${TLS_DIR}/ca.crt" "${TLS_DIR}/server.crt"
+chmod 0640 "${TLS_DIR}/ca.crt" "${TLS_DIR}/server.crt"
+
+# Le nom saisi pour le certificat est celui sous lequel les postes
+# joindront CORRUX : Django doit l'accepter (sinon HTTP 400).
+server_name="$(openssl x509 -in "${TLS_DIR}/server.crt" -noout -subject -nameopt RFC2253 \
+    | sed -n 's/^subject=.*CN=\([^,]*\).*/\1/p')"
+if [ -n "$server_name" ] && ! grep -q "^DJANGO_ALLOWED_HOSTS=\(.*,\)\?${server_name}\(,.*\)\?$" "$CORRUX_ENV_FILE"; then
+    sed -i "s/^DJANGO_ALLOWED_HOSTS=.*/&,${server_name}/" "$CORRUX_ENV_FILE"
+fi
+
+umask 027
+{
+    cat "$CORRUX_ENV_FILE"
+    echo "CORRUX_BACKUP_DESTINATION=${BACKUP_MOUNT}"
+    echo "CORRUX_BACKUP_GPG_RECIPIENT_KEY_PATH=${BACKUP_KEY}"
+} >"${CORRUX_ETC}/backup.env"
+{
+    cat "$CORRUX_ENV_FILE"
+    echo "CORRUX_CERT_CA_KEY_PATH=${TLS_DIR}/ca.key"
+    echo "CORRUX_CERT_CA_CERT_PATH=${TLS_DIR}/ca.crt"
+    echo "CORRUX_CERT_SERVER_KEY_PATH=${TLS_DIR}/server.key"
+    echo "CORRUX_CERT_SERVER_CERT_PATH=${TLS_DIR}/server.crt"
+} >"${CORRUX_ETC}/certs.env"
+chown root:"$CORRUX_USER" "${CORRUX_ETC}/backup.env" "${CORRUX_ETC}/certs.env"
+umask 022
+
+# corrux-backup.service est en ProtectSystem=strict : le support de
+# sauvegarde doit être explicitement autorisé en écriture ; gpg a besoin
+# d'un répertoire personnel inscriptible (tmp privé du service).
+install -d -m 0755 /etc/systemd/system/corrux-backup.service.d
+cat >/etc/systemd/system/corrux-backup.service.d/corrux-setup.conf <<EOF
+# Généré par corrux-setup.
+[Service]
+ReadWritePaths=${BACKUP_MOUNT}
+Environment=HOME=/tmp
+EOF
+
+ln -sf /etc/nginx/sites-available/corrux.conf /etc/nginx/sites-enabled/corrux.conf
+# Le site Debian par défaut capte le port 80 (default_server) et
+# empêcherait la redirection vers HTTPS.
+if [ -L /etc/nginx/sites-enabled/default ]; then
+    rm -f /etc/nginx/sites-enabled/default
+fi
+nginx -t
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload
+    systemctl enable --now corrux-core.service corrux-backup.timer corrux-cert-check.timer
+    systemctl reload-or-restart nginx.service
+fi
+
+echo
+echo "CORRUX est en service : https://${server_name:-$(hostname -f)}/"
+echo "Certificat de l'autorité interne à installer sur les postes : ${TLS_DIR}/ca.crt"

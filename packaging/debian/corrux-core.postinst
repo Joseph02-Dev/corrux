@@ -1,0 +1,35 @@
+#!/bin/sh
+# corrux-core — postinst.
+#
+# Provisionne le système hôte (Debian 12/13, Ubuntu 22.04/24.04,
+# Proxmox VE 8/9) pour une installation par apt : compte système,
+# environnement Python embarqué, configuration, base PostgreSQL locale,
+# migrations. Idempotent. Ne démarre jamais un service qui n'était pas
+# déjà en marche : l'identité, le compte administrateur, le certificat
+# HTTPS et le support de sauvegarde restent le rôle de corrux-setup.
+set -e
+
+. /usr/lib/corrux/common.sh
+
+case "$1" in
+    configure)
+        corrux_ensure_user
+        corrux_ensure_dirs
+        corrux_build_venv
+        corrux_ensure_env
+        corrux_ensure_database || :
+        corrux_apply_migrations_if_ready
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || :
+        fi
+        corrux_restart_if_running
+        if [ ! -f /etc/corrux/tls/server.crt ]; then
+            corrux_log "installation des fichiers terminée."
+            corrux_log "étape suivante : sudo corrux-setup"
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+esac
+
+exit 0

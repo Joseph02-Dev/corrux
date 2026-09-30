@@ -1,0 +1,19 @@
+#!/bin/sh
+# Module métier CORRUX — postinst.
+#
+# Les modules sont déclarés dans INSTALLED_APPS : les migrations ne
+# peuvent s'appliquer qu'une fois corrux-core et tous les modules
+# dépaquetés. Le postinst de chaque paquet CORRUX tente l'opération ;
+# le dernier configuré trouve l'ensemble complet (idempotent).
+set -e
+
+. /usr/lib/corrux/common.sh
+
+case "$1" in
+    configure)
+        corrux_apply_migrations_if_ready
+        corrux_restart_if_running
+        ;;
+esac
+
+exit 0

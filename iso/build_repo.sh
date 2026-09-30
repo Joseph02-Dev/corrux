@@ -19,7 +19,9 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p "${OUT_DIR}"
 
 echo "[build_repo] Construction des paquets .deb CORRUX (version ${VERSION})..."
-python3 - "$VERSION" "$OUT_DIR" <<'PYEOF'
+# Wheels Python embarqués (packaging/wheelhouse.py) : requis pour que le
+# postinst de corrux-core construise son environnement Python hors ligne.
+python3 - "$VERSION" "$OUT_DIR" "${CORRUX_WHEELHOUSE:-}" <<'PYEOF'
 import sys
 from pathlib import Path
 
@@ -32,6 +34,7 @@ from packaging.build_packages import (
 )
 
 version, out_dir = sys.argv[1], Path(sys.argv[2])
+wheelhouse = Path(sys.argv[3]) if sys.argv[3] else None
 project_root = Path(".").resolve()
 
 for builder in (
@@ -39,7 +42,10 @@ for builder in (
     build_corrux_module_documentation_spec,
     build_corrux_module_rh_spec,
 ):
-    spec = builder(version)
+    if builder is build_corrux_core_spec:
+        spec = builder(version, wheelhouse)
+    else:
+        spec = builder(version)
     path = build_deb_package(spec, project_root, out_dir)
     print(f"  -> {path}")
 PYEOF
