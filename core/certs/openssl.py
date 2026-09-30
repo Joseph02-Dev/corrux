@@ -63,6 +63,12 @@ def generate_ca(
             "-days", str(validity_days),
             "-out", str(ca_cert_path),
             "-subj", f"/CN={common_name}/O=CORRUX",
+            # Extensions d'une CA conforme RFC 5280 : sans keyUsage,
+            # les clients stricts (Python >= 3.13, OpenSSL -x509_strict)
+            # rejettent toute la chaîne.
+            "-addext", "basicConstraints=critical,CA:TRUE",
+            "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+            "-addext", "subjectKeyIdentifier=hash",
         ],
         runner,
         "Génération du certificat de la CA",
@@ -124,6 +130,8 @@ def issue_server_certificate(
         "basicConstraints=critical,CA:FALSE\n"
         "keyUsage=critical,digitalSignature,keyEncipherment\n"
         "extendedKeyUsage=serverAuth\n"
+        "subjectKeyIdentifier=hash\n"
+        "authorityKeyIdentifier=keyid:always\n"
     )
     try:
         _run(

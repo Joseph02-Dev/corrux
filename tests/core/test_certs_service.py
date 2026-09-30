@@ -107,6 +107,19 @@ class TestInitializeCaAndServerCertificate:
         assert expected_san in text
         assert "TLS Web Server Authentication" in text
 
+    def test_chain_passes_strict_rfc5280_verification(self, paths, actor):
+        """Python >= 3.13 vérifie en VERIFY_X509_STRICT : une CA sans
+        keyUsage (ou un certificat sans identifiants de clé) fait
+        échouer toute connexion HTTPS vérifiée."""
+        initialize_ca_and_server_certificate(paths, common_name="corrux.local", actor=actor)
+
+        result = subprocess.run(
+            ["openssl", "verify", "-x509_strict", "-CAfile", str(paths.ca_cert),
+             str(paths.server_cert)],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
     def test_respects_custom_validity_days(self, paths, actor):
         initialize_ca_and_server_certificate(
             paths, common_name="corrux.local", actor=actor,
