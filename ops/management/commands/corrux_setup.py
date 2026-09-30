@@ -23,6 +23,7 @@ from ops.setup_service import (
     CorruxSetupConfig,
     SetupError,
     detect_candidate_volumes,
+    ensure_device_not_in_use,
     run_corrux_setup,
 )
 
@@ -97,6 +98,13 @@ class Command(BaseCommand):
             backup_device_path = input(
                 "Périphérique à utiliser pour le support de sauvegarde : "
             )
+
+        # Vérifié avant la question de formatage : un disque système saisi
+        # par erreur est refusé avant toute confirmation destructive.
+        try:
+            ensure_device_not_in_use(backup_device_path)
+        except SetupError as exc:
+            raise CommandError(str(exc)) from exc
 
         format_backup_volume = options["format_backup_volume"]
         if format_backup_volume is None:

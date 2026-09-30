@@ -96,10 +96,52 @@ class CandidateVolume:
     already_mounted_at: str | None
 
 
+def _has_mounted_volume(device: dict) -> bool:
+    """Vrai si le périphérique ou l'un de ses descendants (partition,
+    volume LVM, conteneur chiffré...) est monté — y compris en swap."""
+    if device.get("mountpoint") or any(device.get("mountpoints") or []):
+        return True
+    return any(_has_mounted_volume(child) for child in device.get("children") or [])
+
+
+def _block_device_tree(runner) -> list[dict]:
+    result = runner(
+        ["lsblk", "-J", "-o", "NAME,SIZE,FSTYPE,MOUNTPOINT,TYPE"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        raise SetupError(f"Détection des volumes échouée : {result.stderr.strip()}")
+    return json.loads(result.stdout).get("blockdevices", [])
+
+
+def _contains_device(device: dict, device_path: str) -> bool:
+    if f"/dev/{device['name']}" == device_path:
+        return True
+    return any(_contains_device(child, device_path) for child in device.get("children") or [])
+
+
+def ensure_device_not_in_use(device_path: str, *, runner=subprocess.run) -> None:
+    """Refuse tout périphérique appartenant à un disque dont un volume est
+    monté — en premier lieu le disque système (racine sur une partition
+    ou un volume LVM : le disque lui-même n'est jamais « / »). Garde-fou
+    appliqué avant tout formatage, y compris pour un chemin saisi à la
+    main hors de la liste des candidats."""
+    for disk in _block_device_tree(runner):
+        if _contains_device(disk, device_path) and _has_mounted_volume(disk):
+            raise SetupError(
+                f"{device_path} appartient au disque /dev/{disk['name']}, dont un volume "
+                f"est monté (disque système ?) — refusé. Choisissez un disque dédié "
+                f"aux sauvegardes, sans aucun volume monté."
+            )
+
+
 def detect_candidate_volumes(*, runner=subprocess.run) -> list[CandidateVolume]:
     """Liste les disques candidats — exclut explicitement celui portant
     la racine (§11.1 : « jamais un simple sous-dossier du disque
-    système », a fortiori jamais le disque système lui-même)."""
+    système », a fortiori jamais le disque système lui-même), et plus
+    largement tout disque dont une partition ou un volume (LVM, chiffré,
+    swap) est monté : la racine est presque toujours une partition
+    (/dev/sda2) ou un volume LVM, jamais le disque entier."""
     root_result = runner(
         ["findmnt", "-no", "SOURCE", "/"], capture_output=True, text=True, check=False
     )
@@ -109,16 +151,8 @@ def detect_candidate_volumes(*, runner=subprocess.run) -> list[CandidateVolume]:
         )
     root_device = root_result.stdout.strip()
 
-    lsblk_result = runner(
-        ["lsblk", "-J", "-o", "NAME,SIZE,FSTYPE,MOUNTPOINT,TYPE"],
-        capture_output=True, text=True, check=False,
-    )
-    if lsblk_result.returncode != 0:
-        raise SetupError(f"Détection des volumes échouée : {lsblk_result.stderr.strip()}")
-
-    data = json.loads(lsblk_result.stdout)
     candidates = []
-    for device in data.get("blockdevices", []):
+    for device in _block_device_tree(runner):
         # "disk" en production réelle ; "loop" inclus aussi — un
         # périphérique loopback se comporte identiquement pour le
         # formatage/montage, et c'est le seul moyen de tester cette
@@ -126,7 +160,7 @@ def detect_candidate_volumes(*, runner=subprocess.run) -> list[CandidateVolume]:
         if device.get("type") not in ("disk", "loop"):
             continue
         device_path = f"/dev/{device['name']}"
-        if device_path == root_device:
+        if device_path == root_device or _has_mounted_volume(device):
             continue
         candidates.append(
             CandidateVolume(
@@ -174,7 +208,17 @@ def mount_volume_persistently(
     if result.returncode != 0:
         raise SetupError(f"Montage de {device_path} échoué : {result.stderr.strip()}")
 
-    fstab_line = f"{device_path}\t{mount_point}\text4\tdefaults\t0\t2\n"
+    # Par UUID (un disque externe change de nom d'un démarrage à l'autre :
+    # sdb -> sdc) et `nofail` (support débranché : le système démarre
+    # quand même, seule la sauvegarde échoue et le signale).
+    uuid_result = runner(
+        ["blkid", "-s", "UUID", "-o", "value", device_path],
+        capture_output=True, text=True, check=False,
+    )
+    uuid = uuid_result.stdout.strip()
+    if uuid_result.returncode != 0 or not uuid:
+        raise SetupError(f"UUID de {device_path} introuvable : {uuid_result.stderr.strip()}")
+    fstab_line = f"UUID={uuid}\t{mount_point}\text4\tdefaults,nofail\t0\t2\n"
     with open(fstab_path, "a") as fstab_file:
         fstab_file.write(fstab_line)
 
@@ -246,6 +290,10 @@ def run_corrux_setup(config: CorruxSetupConfig) -> CorruxSetupResult:
     inhérente à toute opération fichier/disque, hors périmètre d'une
     transaction SQL).
     """
+    # Avant toute écriture (compte, certificat, formatage) : jamais le
+    # disque système, même saisi à la main.
+    ensure_device_not_in_use(config.backup_device_path)
+
     with transaction.atomic():
         admin = create_initial_admin(
             username=config.admin_username, password=config.admin_password,
