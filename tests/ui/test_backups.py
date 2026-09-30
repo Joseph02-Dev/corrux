@@ -7,7 +7,7 @@ nécessitant pas le cycle lourd de run_backup() (TECH-009, déjà testé
 pour lui-même).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from django.template import engines
@@ -58,7 +58,7 @@ def no_permission_user(db):
 
 
 def _dt(offset_days=0, hour=10, minute=0):
-    return datetime(2026, 1, 1, hour, minute, tzinfo=UTC) + timedelta(
+    return datetime(2026, 1, 1, hour, minute, tzinfo=timezone.utc) + timedelta(
         days=offset_days
     )
 

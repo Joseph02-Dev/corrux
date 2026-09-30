@@ -17,6 +17,24 @@ atomiquement** la mise à jour : aucun paquet n'est appliqué, un message
 explicite est affiché, et l'événement est journalisé dans le journal
 d'audit.
 
+## Installation par le dépôt apt (curl / apt)
+
+Une machine installée selon [installation.md](installation.md) a le
+dépôt apt signé de CORRUX dans ses sources : la mise à jour est celle de
+tout paquet Debian, déclenchée volontairement par le technicien.
+
+```bash
+sudo apt-get update
+sudo apt-get install --only-upgrade corrux corrux-core \
+    corrux-module-documentation corrux-module-rh
+```
+
+apt vérifie la signature du dépôt ; les paquets reconstruisent
+l'environnement Python, appliquent les migrations et redémarrent
+`corrux-core` (interruption de quelques secondes). Aucune configuration
+(`/etc/corrux`) ni donnée n'est modifiée. Les modes ci-dessous restent
+disponibles, notamment pour une machine sans accès Internet.
+
 ## Mode hors ligne (support amovible)
 
 ### Étape 1 — Préparer le support
@@ -42,9 +60,9 @@ Noter le chemin du périphérique correspondant au support (ex. `/dev/sdc1`).
 ### Étape 3 — Appliquer la mise à jour
 
 ```bash
-cd /opt/corrux && source .venv/bin/activate
+sudo -i   # session root
 export CORRUX_UPDATE_TRUSTED_KEY_PATH=/etc/corrux/release-public-key.asc
-python manage.py apply_offline_update --device /dev/sdc1
+corrux-manage apply_offline_update --device /dev/sdc1
 ```
 
 En sortie, en cas de succès :
@@ -68,11 +86,11 @@ la vérification est assurée nativement par apt lui-même (mécanisme
 standard de dépôt signé), pas par un mécanisme propre à CORRUX.
 
 ```bash
-cd /opt/corrux && source .venv/bin/activate
+sudo -i   # session root
 export CORRUX_UPDATE_REPOSITORY_URL=https://updates.corrux.exemple/
 export CORRUX_UPDATE_TRUSTED_KEYRING_PATH=/etc/corrux/release-keyring.gpg
 export CORRUX_UPDATE_CA_CERT_PATH=/etc/ssl/certs/ca-certificates.crt
-python manage.py apply_online_update \
+corrux-manage apply_online_update \
   --packages corrux-core,corrux-module-documentation,corrux-module-rh \
   --modules core,documentation,rh \
   --target-version <version>

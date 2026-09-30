@@ -1,0 +1,16 @@
+#!/bin/sh
+# corrux-core — prerm : arrêt des services avant retrait du code. Lors
+# d'une mise à jour, corrux-core est seulement redémarré par le postinst
+# de la nouvelle version (interruption minimale).
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            systemctl disable --now corrux-core.service corrux-backup.timer \
+                corrux-cert-check.timer >/dev/null 2>&1 || :
+        fi
+        ;;
+esac
+
+exit 0

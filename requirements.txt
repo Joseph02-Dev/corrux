@@ -12,3 +12,6 @@ PyYAML==6.0.*
 # corrux-core.service n'avait été construit par aucun ticket précédent
 # (gap réel du plan lui-même, pas un oubli d'implémentation).
 gunicorn==26.*
+# Sert les assets de l'interface (STATIC_ROOT) depuis l'application —
+# Nginx n'expose qu'un point d'entrée unique (§8).
+whitenoise==6.*

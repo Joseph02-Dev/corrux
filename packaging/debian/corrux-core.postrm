@@ -1,0 +1,30 @@
+#!/bin/sh
+# corrux-core — postrm.
+#
+# remove : supprime ce que le postinst a généré dans /opt/corrux et le
+#          site Nginx activé. Les données (base PostgreSQL, stockage
+#          documentaire, sauvegardes) et /etc/corrux sont CONSERVÉES.
+# purge  : supprime en plus /etc/corrux (secrets, certificats) et les
+#          assets statiques. La base PostgreSQL et le stockage
+#          documentaire (/var/lib/corrux/storage) ne sont JAMAIS
+#          supprimés automatiquement : ce sont les données du client.
+set -e
+
+case "$1" in
+    remove|purge)
+        rm -rf /opt/corrux/.venv
+        rm -f /etc/nginx/sites-enabled/corrux.conf
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || :
+            systemctl reload nginx.service >/dev/null 2>&1 || :
+        fi
+        ;;
+esac
+
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/corrux /var/lib/corrux/static
+    rm -rf /etc/systemd/system/corrux-backup.service.d
+    echo "corrux: données conservées : base PostgreSQL « corrux » et /var/lib/corrux/storage."
+fi
+
+exit 0

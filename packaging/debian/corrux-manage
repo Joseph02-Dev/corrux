@@ -1,0 +1,15 @@
+#!/bin/sh
+# corrux-manage — exécute une commande d'administration Django de CORRUX
+# avec la configuration de l'instance (/etc/corrux/core.env).
+#   sudo corrux-manage check
+#   sudo corrux-manage migrate
+set -e
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "corrux-manage doit être exécuté en root (sudo)." >&2
+    exit 1
+fi
+
+. /usr/lib/corrux/common.sh
+
+corrux_manage "$@"

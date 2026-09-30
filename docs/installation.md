@@ -1,200 +1,176 @@
 # Installation initiale
 
-Réalisée une seule fois, par un technicien IT, lors de la mise en service
-d'un PC/serveur neuf (Debian 13 « Trixie »). Ne nécessite aucun accès
-Internet après l'installation des paquets CORRUX.
+Réalisée une seule fois, par un technicien IT, sur une machine **déjà
+installée** avec l'un des systèmes suivants (amd64) :
+
+| Système | Versions |
+|---|---|
+| Debian | 12 « Bookworm », 13 « Trixie » |
+| Ubuntu Server | 22.04 LTS, 24.04 LTS |
+| Proxmox VE | 8 (Debian 12), 9 (Debian 13) — directement sur l'hôte |
+
+CORRUX s'installe comme n'importe quel logiciel Debian, depuis son dépôt
+apt signé. Aucun accès Internet n'est nécessaire une fois installé.
 
 ## Prérequis
 
-- Machine x86_64 sous Debian 13, avec les paquets CORRUX déjà installés
-  (`corrux-core`, `corrux-module-documentation`, `corrux-module-rh` —
-  livrés en `.deb`, cf. `packaging/`).
-- **Deux volumes de stockage physiquement distincts** : le disque système
-  (où sont déjà installés les paquets), et un second support pour les
-  sauvegardes — disque secondaire interne, disque externe USB laissé
-  branché en permanence, ou NAS local. **Jamais le disque système.**
-- Une base PostgreSQL déjà créée et accessible (nom, utilisateur, mot de
-  passe, hôte, port).
-- Une clé publique GPG de destinataire pour le chiffrement des sauvegardes
-  (fournie séparément par l'éditeur CORRUX, ou générée localement pour un
-  déploiement autonome).
+- Un accès root (`sudo`).
+- **Deux volumes de stockage physiquement distincts** : le disque système,
+  et un second support pour les sauvegardes — disque secondaire interne,
+  disque externe USB laissé branché en permanence, ou NAS local.
+  **Jamais le disque système.**
+- Une **clé publique GPG** de chiffrement des sauvegardes (fichier
+  `.asc`), fournie par l'éditeur CORRUX ou générée pour un déploiement
+  autonome (cf. [sauvegarde-restauration.md](sauvegarde-restauration.md)).
+  Seule la clé publique est copiée sur le serveur ; la clé privée reste
+  hors de la machine.
+- Les ports 80 et 443 libres (Nginx). Sur Proxmox VE, l'interface de
+  Proxmox (port 8006) n'est pas affectée.
 
-## Étape 1 — Identifier le volume de sauvegarde
+## Étape 1 — Installer CORRUX
 
-Repérer le périphérique du support de sauvegarde (jamais celui du disque
-système) :
+### Méthode A — script d'installation (recommandée)
+
+```bash
+curl -fsSL https://joseph02-dev.github.io/corrux/install.sh | sudo sh
+```
+
+Le script vérifie le système, ajoute la clé de signature du dépôt (son
+empreinte est vérifiée) et le dépôt apt, puis installe le paquet
+`corrux`. Il lance ensuite l'assistant de mise en service (étape 2).
+
+Pour relire le script avant de l'exécuter :
+
+```bash
+curl -fsSLO https://joseph02-dev.github.io/corrux/install.sh
+less install.sh
+sudo sh install.sh
+```
+
+### Méthode B — apt, manuellement
+
+```bash
+sudo apt-get install -y ca-certificates curl
+curl -fsSL https://joseph02-dev.github.io/corrux/corrux-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/corrux-archive-keyring.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/corrux-archive-keyring.gpg] https://joseph02-dev.github.io/corrux ./" \
+  | sudo tee /etc/apt/sources.list.d/corrux.list
+sudo apt-get update
+sudo apt-get install -y corrux
+```
+
+### Ce que fait l'installation du paquet
+
+Automatiquement, sans question :
+
+- installe PostgreSQL, Nginx et les outils système nécessaires (paquets
+  officiels de la distribution) ;
+- crée le compte système `corrux` ;
+- construit l'environnement Python de CORRUX dans `/opt/corrux/.venv`
+  à partir des composants livrés dans le paquet (hors ligne) ;
+- génère `/etc/corrux/core.env` (clé secrète et mot de passe de base de
+  données aléatoires, lisible uniquement par root et le compte `corrux`) ;
+- crée la base PostgreSQL locale `corrux` et applique les migrations.
+
+Aucun service CORRUX n'est encore démarré à ce stade.
+
+## Étape 2 — Mettre CORRUX en service
+
+Repérer d'abord le périphérique du support de sauvegarde (jamais celui du
+disque système, donné par `findmnt -no SOURCE /`) :
 
 ```bash
 lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT,TYPE
 ```
 
-Le disque système est celui indiqué par :
+Puis lancer l'assistant (déjà lancé par la méthode A) :
 
 ```bash
-findmnt -no SOURCE /
+sudo corrux-setup
 ```
 
-Noter le chemin du périphérique de sauvegarde (ex. `/dev/sdb1`) — il sera
-demandé à l'étape 3.
+L'assistant demande, dans l'ordre :
 
-## Étape 2 — Se placer dans l'installation CORRUX
+1. le **point de montage** du support de sauvegarde (défaut
+   `/srv/corrux-backup`) ;
+2. le **chemin de la clé publique GPG** de chiffrement des sauvegardes
+   (copiée dans `/etc/corrux/backup-gpg-public.key`) ;
+3. l'**identifiant**, le **mot de passe** et le **nom complet** du compte
+   administrateur ;
+4. le **nom de la machine** sous lequel les postes joindront CORRUX (nom
+   DNS ou adresse IP du LAN) — utilisé pour le certificat HTTPS ;
+5. le **périphérique** du support de sauvegarde ;
+6. la **confirmation de formatage** — répondre `oui` **efface toutes les
+   données du support** ; `non` s'il est déjà formaté.
 
-```bash
-cd /opt/corrux
-source .venv/bin/activate
-export DJANGO_SETTINGS_MODULE=corrux_core.settings
-export DB_NAME=<nom_base> DB_USER=<utilisateur> DB_PASSWORD=<mot_de_passe>
-export DB_HOST=<hote> DB_PORT=5432
-```
-
-## Étape 3 — Exécuter l'assistant
-
-```bash
-python manage.py corrux_setup
-```
-
-L'assistant pose les questions suivantes, dans l'ordre — chaque étape
-valide avant de passer à la suivante ; un échec affiche un message
-explicite et interrompt l'installation sans laisser d'état partiel :
-
-1. **Identifiant** et **mot de passe** du compte administrateur initial,
-   et son **nom complet**.
-2. **Nom de la machine** (utilisé comme nom commun du certificat HTTPS —
-   ex. le nom d'hôte ou l'adresse IP LAN de la machine).
-3. **Périphérique du support de sauvegarde** (celui identifié à l'étape 1).
-4. **Confirmation de formatage** — répondre `oui` **efface toutes les
-   données déjà présentes sur ce support** ; répondre `non` si le support
-   est déjà formaté et ne doit pas être réinitialisé.
-5. **Point de montage** du support de sauvegarde (ex. `/mnt/corrux-backup`).
-
-À l'issue, l'assistant affiche :
+Chaque étape est validée avant la suivante ; un échec interrompt
+l'assistant sans laisser de compte ni de module à moitié créé. À la fin,
+`corrux-setup` écrit la configuration des tâches planifiées, active le
+site Nginx et démarre CORRUX :
 
 ```
 === Installation terminée avec succès ===
 Compte administrateur : <identifiant>
-Permissions attribuées à l'Administrateur : <nombre>
 Module Documentation : activated
 Module RH : activated
 Sauvegarde de vérification : success
+...
+CORRUX est en service : https://<nom-de-la-machine>/
 ```
 
-Si l'un de ces éléments manque ou affiche un état différent,
-l'installation n'est pas terminée — consulter le message d'erreur affiché
-et recommencer l'étape 3 (aucun état partiel n'est jamais laissé en base).
-
-## Étape 4 — Créer les fichiers d'environnement des services systemd
-
-Les 3 unités systemd de CORRUX (`corrux-core.service`,
-`corrux-backup.service`, `corrux-cert-check.service`) lisent leur
-configuration depuis un fichier d'environnement dédié —
-**`corrux-setup` ne les écrit pas lui-même** (limite constatée lors de la
-rédaction de cette procédure ; les valeurs ci-dessous reprennent
-exactement celles fournies à l'assistant à l'étape 3). Les créer avant de
-démarrer les services :
+## Étape 3 — Vérifier
 
 ```bash
-mkdir -p /etc/corrux
-chmod 700 /etc/corrux
-
-cat > /etc/corrux/core.env << 'EOF'
-DJANGO_SETTINGS_MODULE=corrux_core.settings
-DB_NAME=<nom_base>
-DB_USER=<utilisateur>
-DB_PASSWORD=<mot_de_passe>
-DB_HOST=<hote>
-DB_PORT=5432
-EOF
-
-cat > /etc/corrux/backup.env << 'EOF'
-DJANGO_SETTINGS_MODULE=corrux_core.settings
-DB_NAME=<nom_base>
-DB_USER=<utilisateur>
-DB_PASSWORD=<mot_de_passe>
-DB_HOST=<hote>
-DB_PORT=5432
-CORRUX_BACKUP_DESTINATION=/mnt/corrux-backup
-CORRUX_BACKUP_GPG_RECIPIENT_KEY_PATH=/etc/corrux/backup-gpg-public.key
-EOF
-
-cat > /etc/corrux/certs.env << 'EOF'
-CORRUX_CERT_SERVER_CERT_PATH=/etc/corrux/tls/server.crt
-EOF
-
-chmod 600 /etc/corrux/*.env
+systemctl status corrux-core          # active (running)
+systemctl list-timers 'corrux-*'      # sauvegarde et contrôle du certificat planifiés
 ```
 
-## Étape 5 — Activer la configuration Nginx
-
-Le certificat HTTPS n'existe qu'une fois l'étape 3 terminée avec succès —
-c'est pourquoi cette étape vient après, jamais avant. Le paquet
-`corrux-core` dépose la configuration Nginx dans
-`/etc/nginx/sites-available/corrux.conf`, mais ne l'active jamais lui-même
-(convention Debian standard : un site n'est servi qu'une fois activé par un
-lien symbolique dans `sites-enabled/`) :
-
-```bash
-ln -s /etc/nginx/sites-available/corrux.conf /etc/nginx/sites-enabled/corrux.conf
-nginx -t   # vérifie la configuration avant de recharger
-systemctl reload nginx
-```
-
-## Étape 6 — Démarrer le service applicatif principal
-
-`corrux-core.service` exécute l'application elle-même (via gunicorn, en
-écoute sur `127.0.0.1:8000`, jamais exposé directement — seul Nginx est
-accessible depuis le réseau). Il doit être démarré et activé au boot :
-
-```bash
-systemctl enable --now corrux-core
-systemctl status corrux-core   # doit afficher "active (running)"
-```
-
-## Étape 7 — Activer la sauvegarde et la vérification de certificat planifiées
-
-```bash
-systemctl enable --now corrux-backup.timer
-systemctl enable --now corrux-cert-check.timer
-```
-
-## Étape 8 — Vérifier l'accès HTTPS
-
-Depuis un poste du réseau local, ouvrir `https://<nom-ou-ip-de-la-machine>/`
-dans un navigateur. Le certificat CORRUX étant signé par une autorité de
-certification interne (pas une autorité publique), le navigateur affichera
-un avertissement de sécurité tant que le certificat racine n'a pas été
-installé sur le poste client :
-
-```bash
-# Chemin par défaut du certificat racine, à distribuer aux postes clients :
-/etc/corrux/tls/ca.crt
-```
-
-L'installation du certificat racine sur les postes clients est une
-procédure propre à chaque système d'exploitation client (hors périmètre
-de ce document) — une fois installée, la connexion HTTPS ne déclenche
-plus d'avertissement.
+Depuis un poste du réseau local, ouvrir `https://<nom-de-la-machine>/`.
+Le certificat étant signé par l'autorité de certification interne de
+CORRUX, installer une fois sur chaque poste son certificat racine
+`/etc/corrux/tls/ca.crt` (magasin « Autorités de certification racines de
+confiance ») pour supprimer l'avertissement du navigateur.
 
 ## Mode non interactif (installation scriptée)
 
-Toutes les questions ci-dessus peuvent être fournies en options de ligne
-de commande, pour une installation entièrement automatisée (aucun prompt
-affiché si toutes les options nécessaires sont présentes) :
-
 ```bash
-python manage.py corrux_setup \
+curl -fsSL https://joseph02-dev.github.io/corrux/install.sh | sudo CORRUX_NONINTERACTIVE=1 sh
+sudo install -m 0644 cle-publique-sauvegarde.asc /etc/corrux/backup-gpg-public.key
+sudo corrux-setup \
+  --backup-mount-point /srv/corrux-backup \
   --admin-username admin --admin-password '<mot de passe>' \
   --admin-full-name "Administrateur CORRUX" \
   --certificate-common-name corrux.exemple.local \
   --backup-device-path /dev/sdb1 \
-  --backup-mount-point /mnt/corrux-backup \
-  --format-backup-volume --skip-format-confirmation \
-  --backup-gpg-recipient-key-path /etc/corrux/backup-gpg-public.key \
-  --db-name <nom_base> --db-user <utilisateur> --db-password '<mot de passe>' \
-  --db-host <hote> --db-port 5432
+  --format-backup-volume --skip-format-confirmation
 ```
 
-`--format-backup-volume` **efface les données du support désigné** — à
-n'utiliser que sur un support neuf ou dont l'effacement est voulu.
-`--skip-format-confirmation` supprime la confirmation interactive
-correspondante — à réserver aux installations scriptées où cette
-confirmation a déjà été obtenue par un autre moyen.
+`--format-backup-volume` **efface les données du support désigné**.
+`--skip-format-confirmation` supprime la confirmation correspondante — à
+réserver aux installations où elle a été obtenue par un autre moyen.
+
+## Commandes d'administration
+
+```bash
+sudo corrux-manage <commande>        # ex. check, showmigrations, run_backup
+sudo dpkg-reconfigure corrux-core    # reconstruit l'environnement Python (après une
+                                     # montée de version de la distribution)
+```
+
+## Désinstallation
+
+```bash
+sudo apt-get remove corrux corrux-core corrux-module-documentation corrux-module-rh
+sudo apt-get purge  corrux-core      # supprime aussi /etc/corrux (secrets, certificats)
+```
+
+La base PostgreSQL `corrux`, le stockage documentaire
+(`/var/lib/corrux/storage`) et les sauvegardes ne sont **jamais**
+supprimés automatiquement : ce sont les données du client.
+
+## Base de données distante (optionnel)
+
+Par défaut la base est locale. Pour une base PostgreSQL existante sur un
+autre serveur, modifier `DB_HOST`, `DB_NAME`, `DB_USER` et `DB_PASSWORD`
+dans `/etc/corrux/core.env` **avant** `corrux-setup` ; la base et le rôle
+doivent alors être créés par l'administrateur de ce serveur.

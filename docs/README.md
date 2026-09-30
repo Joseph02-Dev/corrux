@@ -4,8 +4,11 @@ Procédures opérationnelles pas-à-pas pour l'installation et l'exploitation
 courante d'une instance CORRUX. Chaque procédure est autonome : un
 technicien peut la suivre sans support supplémentaire.
 
-- [Installation initiale](installation.md) — première mise en route sur un
-  PC/serveur neuf (`corrux-setup`).
+- [Installation initiale](installation.md) — installation par `curl` ou
+  `apt` sur Debian, Ubuntu ou Proxmox VE, puis mise en service
+  (`corrux-setup`).
+- [Publication d'une version](publication.md) — pour l'éditeur : dépôt
+  apt signé et script d'installation.
 - [Sauvegarde et restauration](sauvegarde-restauration.md) — consultation
   des sauvegardes planifiées, procédure de restauration manuelle.
 - [Renouvellement du certificat HTTPS](certificat.md) — `corrux-cert
@@ -15,18 +18,15 @@ technicien peut la suivre sans support supplémentaire.
 
 ## Convention commune à toutes les procédures
 
-Toutes les commandes ci-après s'exécutent depuis la racine de
-l'installation CORRUX (`/opt/corrux/`, cf. [installation.md](installation.md)),
-avec l'environnement virtuel Python de l'application activé :
+Toutes les commandes d'administration s'exécutent en root, via
+`corrux-manage`, qui charge automatiquement la configuration de
+l'instance (`/etc/corrux/core.env` : base de données, clé secrète,
+chemins) et l'environnement Python de CORRUX :
 
 ```bash
-cd /opt/corrux
-source .venv/bin/activate
+sudo -i
+corrux-manage check
 ```
 
-Les variables d'environnement `DB_NAME`, `DB_USER`, `DB_PASSWORD`,
-`DB_HOST`, `DB_PORT` et `DJANGO_SETTINGS_MODULE=corrux_core.settings`
-doivent être définies dans l'environnement du technicien ou dans un
-fichier `.env` chargé au démarrage du shell — la procédure
-d'installation ([installation.md](installation.md)) les met en place lors
-de la première mise en route.
+Les variables propres à une procédure (ex. `CORRUX_BACKUP_DESTINATION`)
+sont exportées dans cette même session root avant la commande.

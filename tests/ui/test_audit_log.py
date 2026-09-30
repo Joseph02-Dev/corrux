@@ -7,7 +7,7 @@ code (core/modules/manager.py, core/backup/service.py,
 core/identity/auth.py, ui/views.py).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from django.test import Client
@@ -56,7 +56,7 @@ def no_permission_user(db):
 
 
 def _dt(offset_seconds=0):
-    return datetime(2026, 3, 1, 12, 0, tzinfo=UTC) + timedelta(
+    return datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc) + timedelta(
         seconds=offset_seconds
     )
 
@@ -240,7 +240,7 @@ class TestFiltering:
         _make_entry("auth.login", "ancien", status="success", timestamp=_dt(0))
         _make_entry(
             "auth.login", "recent", status="success",
-            timestamp=datetime(2026, 3, 10, tzinfo=UTC),
+            timestamp=datetime(2026, 3, 10, tzinfo=timezone.utc),
         )
 
         client = _authenticated_client(reader)
@@ -253,7 +253,7 @@ class TestFiltering:
         _make_entry("auth.login", "ancien", status="success", timestamp=_dt(0))
         _make_entry(
             "auth.login", "recent", status="success",
-            timestamp=datetime(2026, 3, 10, tzinfo=UTC),
+            timestamp=datetime(2026, 3, 10, tzinfo=timezone.utc),
         )
 
         client = _authenticated_client(reader)
@@ -266,14 +266,14 @@ class TestFiltering:
         actor = User.objects.create(username="combine", full_name="Combine Test")
         _make_entry(
             "user.update", "match", actor=actor,
-            timestamp=datetime(2026, 3, 5, tzinfo=UTC),
+            timestamp=datetime(2026, 3, 5, tzinfo=timezone.utc),
         )
         _make_entry(
             "auth.login", "wrong_action", actor=actor, status="success", timestamp=_dt(0)
         )
         _make_entry(
             "user.update", "wrong_actor",
-            timestamp=datetime(2026, 3, 5, tzinfo=UTC),
+            timestamp=datetime(2026, 3, 5, tzinfo=timezone.utc),
         )
 
         client = _authenticated_client(reader)

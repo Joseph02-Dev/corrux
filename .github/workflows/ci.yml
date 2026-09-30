@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - name: shellcheck (scripts d'installation et de packaging)
+        run: |
+          shellcheck --severity=warning -s sh install/install.sh packaging/debian/common.sh \
+            packaging/debian/corrux-setup packaging/debian/corrux-manage \
+            packaging/debian/*.postinst packaging/debian/*.prerm packaging/debian/*.postrm \
+            packaging/test_install/container_test.sh
+          shellcheck packaging/build_apt_site.sh packaging/test_install/run_in_container.sh
+
+  tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Bornes des versions de Python des distributions supportées.
+        python-version: ["3.10", "3.13"]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: corrux
+          POSTGRES_PASSWORD: corrux-ci
+          POSTGRES_DB: corrux
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-a-secret
+      DB_NAME: corrux
+      DB_USER: corrux
+      DB_PASSWORD: corrux-ci
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: sudo apt-get update -q && sudo apt-get install -y -q dpkg-dev apt-utils nginx
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      # Root : tests d'installation dpkg réelle et de support de sauvegarde
+      # (losetup, mount) — ignorés sinon.
+      - run: sudo -E env "PATH=$PATH" pytest -q
+
+  install-test:
+    # Parcours client complet (install.sh -> apt -> corrux-setup -> connexion
+    # HTTPS -> purge) sur chaque distribution supportée, avec une clé de
+    # signature jetable. Proxmox VE 8/9 repose sur Debian 12/13.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q dpkg-dev apt-utils
+      - run: sudo systemctl stop postgresql || true
+      - name: Clé de signature jetable
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 -p "$GNUPGHOME"
+          gpg --batch --passphrase '' --quick-generate-key "CORRUX CI <ci@corrux.invalid>" rsa3072 sign 1d
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+      - name: Construction du site de publication
+        env:
+          CORRUX_SIGNING_KEY_ID: ci@corrux.invalid
+          CORRUX_REPO_URL: http://127.0.0.1:8765
+        run: packaging/build_apt_site.sh "0.0.0~ci${{ github.run_number }}" "$RUNNER_TEMP/site"
+      - name: Installation dans ${{ matrix.image }}
+        run: packaging/test_install/run_in_container.sh "$RUNNER_TEMP/site" "${{ matrix.image }}" --setup

@@ -5,7 +5,7 @@ filtrage par permission est vérifié comme comportement observable réel,
 pas par inspection du code.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 from django.test import override_settings
@@ -35,7 +35,7 @@ def other_user(db):
 
 
 def _dt(day: int) -> datetime:
-    return datetime(2026, 3, day, tzinfo=UTC)
+    return datetime(2026, 3, day, tzinfo=timezone.utc)
 
 
 def _upload(owner_user, filename="x.pdf", **kwargs):

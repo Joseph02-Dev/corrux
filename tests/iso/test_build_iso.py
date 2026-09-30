@@ -204,7 +204,7 @@ def test_build_repo_produces_valid_apt_repository(tmp_path):
 
     debs = sorted(p.name for p in out_dir.glob("*.deb"))
     assert debs == [
-        "corrux-core_1.0.0_all.deb",
+        "corrux-core_1.0.0_amd64.deb",
         "corrux-module-documentation_1.0.0_all.deb",
         "corrux-module-rh_1.0.0_all.deb",
     ]

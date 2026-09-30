@@ -1,5 +1,14 @@
 # Build ISO CORRUX (BUILD-003 — prototype)
 
+> **Mode d'installation optionnel.** Le mode principal est désormais
+> l'installation sur un système existant par `curl`/`apt`
+> ([docs/installation.md](../docs/installation.md)). Depuis ce
+> changement, le paquet `corrux-core` construit son environnement
+> Python à partir de wheels embarqués : exporter
+> `CORRUX_WHEELHOUSE=<répertoire>` (produit par
+> `python -m packaging.wheelhouse requirements.txt <répertoire>`) avant
+> `build_iso.sh`, sans quoi son postinst échoue hors ligne.
+
 Construit une ISO serveur Debian 13 bootable (BIOS + UEFI) embarquant
 les paquets CORRUX et un preseed d'installation automatisée. Ne
 modifie jamais la chaîne de boot officielle Debian (isolinux/grub-efi
