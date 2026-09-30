@@ -58,6 +58,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -135,6 +136,15 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SAMESITE = "Lax"
 
+# --- Derrière le reverse proxy Nginx (TLS terminé par Nginx) ------------------
+# gunicorn n'écoute que sur 127.0.0.1 (corrux-core.service) : seul Nginx peut
+# lui parler, et il positionne toujours X-Forwarded-Proto (nginx-corrux.conf).
+# Sans ce réglage, Django voit la requête en HTTP et rejette tout POST HTTPS
+# (vérification CSRF de l'en-tête Origin) — la connexion serait impossible.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    CSRF_COOKIE_SECURE = True
+
 # --- Internationalisation -----------------------------------------------------
 
 LANGUAGE_CODE = "fr-fr"
@@ -145,6 +155,11 @@ USE_TZ = True
 # --- Fichiers statiques --------------------------------------------------------
 
 STATIC_URL = "static/"
+# Cible de `collectstatic` (assets de l'interface uniquement — jamais le
+# stockage documentaire). Servie par l'application elle-même via WhiteNoise :
+# Nginx garde un point d'entrée unique `location /` (§8, cf.
+# ops/nginx_config.py), aucun fichier n'est servi directement par Nginx.
+STATIC_ROOT = os.environ.get("CORRUX_STATIC_ROOT", str(BASE_DIR / "var" / "static"))
 
 # --- Stockage fichiers générique (TECH-004) --------------------------------
 # Cf. architecture-technique-v1.md §8 : racine unique de stockage.

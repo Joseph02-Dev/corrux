@@ -86,6 +86,26 @@ class TestInitializeCaAndServerCertificate:
         initialize_ca_and_server_certificate(paths, common_name="corrux.local", actor=actor)
 
         assert list(tmp_path.glob("*.csr")) == []
+        assert list(tmp_path.glob("*.ext")) == []
+
+    @pytest.mark.parametrize(
+        ("common_name", "expected_san"),
+        [("corrux.local", "DNS:corrux.local"), ("192.168.1.20", "IP Address:192.168.1.20")],
+    )
+    def test_server_certificate_carries_subject_alt_name(
+        self, paths, actor, common_name, expected_san
+    ):
+        """Sans subjectAltName, Chrome/Edge/Firefox refusent le
+        certificat (le CN est ignoré), même avec la CA installée."""
+        initialize_ca_and_server_certificate(paths, common_name=common_name, actor=actor)
+
+        text = subprocess.run(
+            ["openssl", "x509", "-in", str(paths.server_cert), "-noout", "-text"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        assert "X509v3 Subject Alternative Name" in text
+        assert expected_san in text
+        assert "TLS Web Server Authentication" in text
 
     def test_respects_custom_validity_days(self, paths, actor):
         initialize_ca_and_server_certificate(

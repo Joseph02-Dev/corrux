@@ -9,3 +9,5 @@ media/
 .pytest_cache/
 .ruff_cache/
 *.log
+# Stockage et assets collectés en développement (CORRUX_STORAGE_ROOT/STATIC_ROOT par défaut)
+var/

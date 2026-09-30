@@ -15,8 +15,9 @@ seuils d'alerte, audit) — cf. core/certs/service.py pour cette couche.
 
 from __future__ import annotations
 
+import ipaddress
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -69,6 +70,15 @@ def generate_ca(
     ca_key_path.chmod(0o600)
 
 
+def _subject_alt_name(common_name: str) -> str:
+    """Nom de la machine (DNS) ou adresse IP, selon ce qui a été saisi."""
+    try:
+        ipaddress.ip_address(common_name)
+    except ValueError:
+        return f"DNS:{common_name}"
+    return f"IP:{common_name}"
+
+
 def issue_server_certificate(
     server_key_path: Path,
     server_cert_path: Path,
@@ -105,6 +115,16 @@ def issue_server_certificate(
         "Génération de la requête de signature (CSR)",
     )
 
+    # subjectAltName obligatoire : les navigateurs (Chrome/Edge depuis
+    # 2017, Firefox) ignorent le CN et refusent un certificat sans SAN,
+    # même signé par une CA de confiance.
+    ext_path = server_cert_path.with_suffix(".ext")
+    ext_path.write_text(
+        f"subjectAltName={_subject_alt_name(common_name)}\n"
+        "basicConstraints=critical,CA:FALSE\n"
+        "keyUsage=critical,digitalSignature,keyEncipherment\n"
+        "extendedKeyUsage=serverAuth\n"
+    )
     try:
         _run(
             [
@@ -116,6 +136,7 @@ def issue_server_certificate(
                 "-out", str(server_cert_path),
                 "-days", str(validity_days),
                 "-sha256",
+                "-extfile", str(ext_path),
             ],
             runner,
             "Signature du certificat serveur",
@@ -125,6 +146,7 @@ def issue_server_certificate(
         # disque, réussite ou échec (même discipline que TECH-009 pour
         # les artefacts de sauvegarde en clair).
         csr_path.unlink(missing_ok=True)
+        ext_path.unlink(missing_ok=True)
 
     server_key_path.chmod(0o600)
 
@@ -143,4 +165,4 @@ def get_certificate_expiry(cert_path: Path, *, runner=subprocess.run) -> datetim
     # jamais %Z (le parsing de fuseau par strptime est peu fiable),
     # la mention finale est retirée puis UTC est attaché explicitement.
     naive = datetime.strptime(raw_date.strip().removesuffix(" GMT"), "%b %d %H:%M:%S %Y")
-    return naive.replace(tzinfo=UTC)
+    return naive.replace(tzinfo=timezone.utc)
