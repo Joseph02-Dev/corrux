@@ -120,6 +120,8 @@ if [ "${CORRUX_TEST_SETUP:-0}" = "1" ]; then
     jar=/tmp/cookies
     test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/login/)" = "301" \
         || fail "HTTP non redirigé vers HTTPS"
+    root_target="$(curl -s -o /dev/null -w '%{redirect_url}' --cacert "$ca" --resolve "$resolve" "$base/")"
+    test "$root_target" = "$base/login/" || fail "la racine ne redirige pas vers /login/ (${root_target:-aucune redirection})"
     page="$(curl -fsS --cacert "$ca" --resolve "$resolve" -c "$jar" "$base/login/")" \
         || fail "page de connexion HTTPS"
     token="$(echo "$page" | sed -n 's/.*name="csrfmiddlewaretoken" value="\([^"]*\)".*/\1/p' | head -1)"

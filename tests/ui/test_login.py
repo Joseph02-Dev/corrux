@@ -342,3 +342,30 @@ class TestAccessibility:
     def test_submit_button_is_type_submit(self):
         content = _client().get(LOGIN_URL).content.decode()
         assert 'type="submit"' in content
+
+
+@pytest.mark.django_db
+class TestSiteRoot:
+    """`https://<serveur>/` — l'adresse que tape un utilisateur : jamais
+    un 404 (régression constatée sur la première installation réelle)."""
+
+    def test_anonymous_visitor_is_sent_to_the_login_screen(self):
+        response = _client().get("/")
+
+        assert response.status_code == 302
+        assert response.url == LOGIN_URL
+
+    def test_authenticated_user_is_sent_to_the_workspace(self, active_user):
+        client = _client()
+        client.get(LOGIN_URL)
+        _post_login(client, "jdupont", PASSWORD)
+
+        response = client.get("/")
+
+        assert response.status_code == 302
+        assert response.url == "/shell-demo/"
+
+    def test_root_is_read_only(self):
+        # Sans contrôle CSRF : c'est la restriction de méthode qui est
+        # testée ici (le CSRF rejetterait le POST avant la vue).
+        assert Client().post("/").status_code == 405

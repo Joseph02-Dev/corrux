@@ -107,6 +107,16 @@ def _safe_redirect_target(request, candidate: str) -> str:
     return DEFAULT_LOGIN_REDIRECT
 
 
+@require_GET
+def home(request):
+    """Racine du site (`https://<serveur>/`) : l'adresse que tape un
+    utilisateur. Vers l'espace de travail s'il est connecté, sinon vers
+    l'écran de connexion (sans cette route, Django répondait 404)."""
+    if request.corrux_user is not None:
+        return HttpResponseRedirect(DEFAULT_LOGIN_REDIRECT)
+    return HttpResponseRedirect(reverse("ui-login"))
+
+
 def login_page(request):
     """Écran de connexion — UI-103.
 
