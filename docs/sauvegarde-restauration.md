@@ -13,11 +13,10 @@ Depuis l'interface web CORRUX : menu **Administration › Sauvegardes**
 dernier succès, le statut de chaque exécution, et la taille de chaque
 archive.
 
-En ligne de commande, depuis `/opt/corrux` (environnement virtuel activé,
-variables `DB_*` définies) :
+En ligne de commande, en root :
 
 ```bash
-python manage.py shell -c "
+corrux-manage shell -c "
 from core.backup.models import BackupRun
 for run in BackupRun.objects.order_by('-started_at')[:10]:
     print(run.started_at, run.status, run.size_bytes)
@@ -32,7 +31,7 @@ planification automatique, ou après une modification de la destination :
 ```bash
 export CORRUX_BACKUP_DESTINATION=/mnt/corrux-backup
 export CORRUX_BACKUP_GPG_RECIPIENT_KEY_PATH=/etc/corrux/backup-gpg-public.key
-python manage.py run_backup
+corrux-manage run_backup
 ```
 
 La commande refuse de s'exécuter (et journalise une alerte) si

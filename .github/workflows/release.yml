@@ -1,0 +1,118 @@
+name: Release
+
+# Publie une version : `git tag v1.2.0 && git push origin v1.2.0`.
+#
+# Résultat :
+#   https://joseph02-dev.github.io/corrux/install.sh  (curl | sh)
+#   https://joseph02-dev.github.io/corrux/            (dépôt apt signé)
+#   + paquets .deb attachés à la GitHub Release.
+#
+# Prérequis (une seule fois) :
+#   - Settings > Pages > Source : « GitHub Actions ».
+#   - Secret CORRUX_APT_SIGNING_KEY : clé privée GPG de signature du dépôt
+#     (format ASCII, `gpg --armor --export-secret-keys <empreinte>`).
+#   - Secret CORRUX_APT_SIGNING_PASSPHRASE : sa phrase de passe (optionnel).
+#   Cf. docs/publication.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  REPO_URL: https://joseph02-dev.github.io/corrux
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update -q && sudo apt-get install -y -q dpkg-dev apt-utils
+      - id: version
+        name: Version Debian à partir du tag (v1.2.0-rc1 -> 1.2.0~rc1)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version/-/\~}" >> "$GITHUB_OUTPUT"
+      - name: Import de la clé de signature
+        env:
+          SIGNING_KEY: ${{ secrets.CORRUX_APT_SIGNING_KEY }}
+        run: |
+          if [ -z "$SIGNING_KEY" ]; then
+            echo "::error::Secret CORRUX_APT_SIGNING_KEY absent (cf. docs/publication.md)."
+            exit 1
+          fi
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 -p "$GNUPGHOME"
+          printf '%s\n' "$SIGNING_KEY" | gpg --batch --import
+          fpr="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')"
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "CORRUX_SIGNING_KEY_ID=$fpr" >> "$GITHUB_ENV"
+      - name: Construction et signature du site
+        env:
+          CORRUX_SIGNING_PASSPHRASE: ${{ secrets.CORRUX_APT_SIGNING_PASSPHRASE }}
+          CORRUX_REPO_URL: ${{ env.REPO_URL }}
+        run: packaging/build_apt_site.sh "${{ steps.version.outputs.version }}" site
+      - name: Suppression de la clé privée du runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/gnupg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site/
+
+  install-test:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+      - run: sudo systemctl stop postgresql || true
+      - name: Installation dans ${{ matrix.image }} (paquets signés de la release)
+        run: packaging/test_install/run_in_container.sh site "${{ matrix.image }}" --setup
+
+  publish:
+    needs: [build, install-test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "CORRUX ${{ needs.build.outputs.version }}" \
+            --notes "Installation : curl -fsSL ${REPO_URL}/install.sh | sudo sh" \
+            site/*.deb site/SHA256SUMS site/corrux-archive-keyring.asc

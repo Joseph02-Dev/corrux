@@ -18,9 +18,9 @@ Ou, pour déclencher manuellement le même contrôle que le timer planifié
 sans rien modifier) :
 
 ```bash
-cd /opt/corrux && source .venv/bin/activate
+sudo -i   # session root
 export CORRUX_CERT_SERVER_CERT_PATH=/etc/corrux/tls/server.crt
-python manage.py check_certificate_expiry
+corrux-manage check_certificate_expiry
 ```
 
 ## Renouveler le certificat
@@ -31,13 +31,13 @@ postes clients ayant déjà installé le certificat racine n'ont donc rien à
 refaire.
 
 ```bash
-cd /opt/corrux && source .venv/bin/activate
+sudo -i   # session root
 export CORRUX_CERT_CA_KEY_PATH=/etc/corrux/tls/ca.key
 export CORRUX_CERT_CA_CERT_PATH=/etc/corrux/tls/ca.crt
 export CORRUX_CERT_SERVER_KEY_PATH=/etc/corrux/tls/server.key
 export CORRUX_CERT_SERVER_CERT_PATH=/etc/corrux/tls/server.crt
 export CORRUX_CERT_COMMON_NAME=<nom-ou-ip-de-la-machine>
-python manage.py renew_certificate
+corrux-manage renew_certificate
 ```
 
 En sortie : `Certificat serveur renouvelé (<nom>).`
