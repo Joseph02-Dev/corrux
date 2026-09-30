@@ -159,8 +159,15 @@ class TestFormatAndMount:
             loop_device, mount_point, fstab_path=fstab_path, actor=None,
         )
 
-        assert loop_device in fstab_path.read_text()
-        assert str(mount_point) in fstab_path.read_text()
+        entry = fstab_path.read_text()
+        uuid = subprocess.run(
+            ["blkid", "-s", "UUID", "-o", "value", loop_device],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        # Par UUID (un disque externe change de nom au redémarrage) et
+        # `nofail` (support débranché : le système démarre quand même).
+        assert entry == f"UUID={uuid}\t{mount_point}\text4\tdefaults,nofail\t0\t2\n"
+        assert loop_device not in entry
 
     def test_mount_never_touches_the_real_system_fstab(self):
         """Chemin fstab toujours injectable — jamais /etc/fstab codé en

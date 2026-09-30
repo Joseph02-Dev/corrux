@@ -100,6 +100,8 @@ if [ "${CORRUX_TEST_SETUP:-0}" = "1" ]; then
     grep -q 'ReadWritePaths=/srv/corrux-backup' \
         /etc/systemd/system/corrux-backup.service.d/corrux-setup.conf || fail "drop-in sauvegarde"
     test -L /etc/nginx/sites-enabled/corrux.conf || fail "site Nginx non activé"
+    grep -Eq '^UUID=[0-9a-f-]+	/srv/corrux-backup	ext4	defaults,nofail	' /tmp/fstab \
+        || fail "entrée fstab sans UUID/nofail : $(cat /tmp/fstab)"
     ls /srv/corrux-backup/*.tar.gpg >/dev/null || fail "aucune sauvegarde de vérification"
     if corrux-setup >/dev/null 2>&1; then fail "corrux-setup rejoué sur une instance configurée"; fi
 
@@ -118,6 +120,8 @@ if [ "${CORRUX_TEST_SETUP:-0}" = "1" ]; then
     jar=/tmp/cookies
     test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1/login/)" = "301" \
         || fail "HTTP non redirigé vers HTTPS"
+    root_target="$(curl -s -o /dev/null -w '%{redirect_url}' --cacert "$ca" --resolve "$resolve" "$base/")"
+    test "$root_target" = "$base/login/" || fail "la racine ne redirige pas vers /login/ (${root_target:-aucune redirection})"
     page="$(curl -fsS --cacert "$ca" --resolve "$resolve" -c "$jar" "$base/login/")" \
         || fail "page de connexion HTTPS"
     token="$(echo "$page" | sed -n 's/.*name="csrfmiddlewaretoken" value="\([^"]*\)".*/\1/p' | head -1)"
