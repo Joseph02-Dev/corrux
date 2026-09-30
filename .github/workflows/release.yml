@@ -1,6 +1,9 @@
 name: Release
 
-# Publie une version : `git tag v1.2.0 && git push origin v1.2.0`.
+# Publie une version, au choix :
+#   - `git tag v1.2.0 && git push origin v1.2.0` ;
+#   - ou depuis github.com : Releases > Draft a new release > tag `v1.2.0`
+#     > Publish (les paquets sont alors ajoutés à cette release).
 #
 # Résultat :
 #   https://joseph02-dev.github.io/corrux/install.sh  (curl | sh)
@@ -9,6 +12,7 @@ name: Release
 #
 # Prérequis (une seule fois) :
 #   - Settings > Pages > Source : « GitHub Actions ».
+#   - Settings > Environments > github-pages : règle de tag `v*` (et `V*`).
 #   - Secret CORRUX_APT_SIGNING_KEY : clé privée GPG de signature du dépôt
 #     (format ASCII, `gpg --armor --export-secret-keys <empreinte>`).
 #   - Secret CORRUX_APT_SIGNING_PASSPHRASE : sa phrase de passe (optionnel).
@@ -16,7 +20,8 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    # Les deux casses : GitHub distingue `V1.0.0` de `v1.0.0`.
+    tags: ["v*", "V*"]
 
 permissions:
   contents: read
@@ -42,7 +47,7 @@ jobs:
       - id: version
         name: Version Debian à partir du tag (v1.2.0-rc1 -> 1.2.0~rc1)
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${GITHUB_REF_NAME#[vV]}"
           echo "version=${version/-/\~}" >> "$GITHUB_OUTPUT"
       - name: Import de la clé de signature
         env:
@@ -112,7 +117,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "CORRUX ${{ needs.build.outputs.version }}" \
-            --notes "Installation : curl -fsSL ${REPO_URL}/install.sh | sudo sh" \
-            site/*.deb site/SHA256SUMS site/corrux-archive-keyring.asc
+          assets=(site/*.deb site/SHA256SUMS site/corrux-archive-keyring.asc)
+          # Release déjà créée depuis l'interface web (qui crée aussi le
+          # tag) : on y ajoute les paquets au lieu d'échouer.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "CORRUX ${{ needs.build.outputs.version }}" \
+              --notes "Installation : curl -fsSL ${REPO_URL}/install.sh | sudo sh" \
+              "${assets[@]}"
+          fi

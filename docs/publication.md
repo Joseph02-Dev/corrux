@@ -46,6 +46,12 @@ Supprimer ensuite `corrux-archive-signing.asc` du poste (`shred -u`).
 Dépôt GitHub > *Settings* > *Pages* > *Build and deployment* >
 *Source* : **GitHub Actions**.
 
+Puis *Settings* > *Environments* > **github-pages** > *Deployment
+branches and tags* > *Add deployment branch or tag rule* > type **Tag**,
+motif `v*` (et `V*`). Par défaut, cet environnement n'accepte que la
+branche `main` : sans cette règle, la publication d'un tag est refusée
+(« Tag "v1.0.0" is not allowed to deploy to github-pages »).
+
 ## 4. Publier une version
 
 ```bash
@@ -53,6 +59,10 @@ git checkout main && git pull
 git tag v1.0.0
 git push origin v1.0.0
 ```
+
+Ou, sans terminal : github.com > *Releases* > *Draft a new release* >
+*Choose a tag* : taper `v1.0.0` > *Create new tag on publish* >
+*Publish release*. Le workflow ajoute ensuite les paquets à cette release.
 
 Le workflow *Release* :
 
