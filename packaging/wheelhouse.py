@@ -8,6 +8,7 @@ l'installation ne dépend jamais de PyPI, ni d'Internet.
 
   Ubuntu 22.04 -> 3.10 · Debian 12 / Proxmox VE 8 -> 3.11
   Ubuntu 24.04 -> 3.12 · Debian 13 / Proxmox VE 9 -> 3.13
+  Ubuntu 26.04 -> 3.14
 
 `--only-binary=:all:` : aucune compilation sur la machine cliente (pas
 de compilateur requis). Plateformes manylinux jusqu'à glibc 2.28 :
@@ -23,7 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SUPPORTED_PYTHON_VERSIONS = ("3.10", "3.11", "3.12", "3.13")
+SUPPORTED_PYTHON_VERSIONS = ("3.10", "3.11", "3.12", "3.13", "3.14")
 MANYLINUX_PLATFORMS = (
     "manylinux2014_x86_64",
     "manylinux_2_17_x86_64",

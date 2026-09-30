@@ -130,7 +130,7 @@ class TestPackageStructure:
     def test_corrux_core_depends_only_on_packages_common_to_all_supported_systems(
         self, built_packages
     ):
-        """Debian 12/13, Ubuntu 22.04/24.04, Proxmox VE 8/9 : aucune
+        """Debian 12/13, Ubuntu 22.04/24.04/26.04, Proxmox VE 8/9 : aucune
         dépendance vers une bibliothèque Python de la distribution
         (versions divergentes) — elles sont embarquées (venv)."""
         from packaging.build_packages import CORRUX_CORE_DEPENDS

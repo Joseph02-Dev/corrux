@@ -82,7 +82,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04"]
+        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
