@@ -6,7 +6,7 @@ installée** avec l'un des systèmes suivants (amd64) :
 | Système | Versions |
 |---|---|
 | Debian | 12 « Bookworm », 13 « Trixie » |
-| Ubuntu Server | 22.04 LTS, 24.04 LTS |
+| Ubuntu Server | 22.04 LTS, 24.04 LTS, 26.04 LTS |
 | Proxmox VE | 8 (Debian 12), 9 (Debian 13) — directement sur l'hôte |
 
 CORRUX s'installe comme n'importe quel logiciel Debian, depuis son dépôt

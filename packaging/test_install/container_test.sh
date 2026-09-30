@@ -1,6 +1,6 @@
 #!/bin/sh
 # Test d'installation de bout en bout, exécuté DANS un conteneur de la
-# distribution cible (Debian 12/13, Ubuntu 22.04/24.04) — DEPLOY-001.
+# distribution cible (Debian 12/13, Ubuntu 22.04/24.04/26.04) — DEPLOY-001.
 #
 # Suit exactement le parcours client : `install.sh` (dépôt apt signé,
 # vérification d'empreinte, `apt-get install corrux`), puis vérifie

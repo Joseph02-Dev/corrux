@@ -8,13 +8,13 @@ TECH-009/010 : `WorkingDirectory=/opt/corrux`,
 Installation sur un système existant (DEPLOY-001) — remplace
 l'installation par ISO comme mode principal : CORRUX s'installe par apt
 (ou par le script `install/install.sh`, qui ne fait qu'ajouter le dépôt
-apt signé) sur Debian 12/13, Ubuntu 22.04/24.04 LTS et Proxmox VE 8/9.
+apt signé) sur Debian 12/13, Ubuntu 22.04/24.04/26.04 LTS et Proxmox VE 8/9.
 
 Conséquences sur les paquets :
 - Environnement Python embarqué : les dépendances Python (Django…) ne
   viennent plus des paquets `python3-*` de la distribution — leurs
   versions divergent trop d'une distribution à l'autre (Django 3.2 à
-  5.2). corrux-core livre des wheels figés pour CPython 3.10 à 3.13
+  5.2). corrux-core livre des wheels figés pour CPython 3.10 à 3.14
   (`packaging/wheelhouse.py`) et son postinst construit
   `/opt/corrux/.venv` hors ligne (`pip --no-index`). Le paquet est donc
   `amd64` (wheels binaires x86_64).
@@ -217,7 +217,7 @@ def build_deb_package(spec: PackageSpec, project_root: Path, output_dir: Path) -
 
 # --- Spécifications des paquets CORRUX (TECH-043, DEPLOY-001) -------------------
 # Dépendances : uniquement des paquets présents sous le même nom dans
-# Debian 12/13, Ubuntu 22.04/24.04 et Proxmox VE 8/9 (base Debian). Les
+# Debian 12/13, Ubuntu 22.04/24.04/26.04 et Proxmox VE 8/9 (base Debian). Les
 # dépendances Python sont embarquées (wheels), cf. docstring de module.
 # Python >= 3.10 : minimum de Django 5.2 (Ubuntu 22.04 fournit 3.10).
 

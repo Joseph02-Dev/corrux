@@ -18,8 +18,8 @@ from packaging.wheelhouse import (
 
 
 def test_supported_python_versions_cover_all_target_distributions():
-    # Ubuntu 22.04, Debian 12/Proxmox 8, Ubuntu 24.04, Debian 13/Proxmox 9.
-    assert SUPPORTED_PYTHON_VERSIONS == ("3.10", "3.11", "3.12", "3.13")
+    # Ubuntu 22.04, Debian 12/Proxmox 8, Ubuntu 24.04, Debian 13/Proxmox 9, Ubuntu 26.04.
+    assert SUPPORTED_PYTHON_VERSIONS == ("3.10", "3.11", "3.12", "3.13", "3.14")
 
 
 def test_pip_command_downloads_binary_wheels_only_for_the_target_python(tmp_path):

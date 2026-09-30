@@ -6,7 +6,7 @@ pour le produit et l'architecture.
 
 ## Installation (production)
 
-Sur Debian 12/13, Ubuntu 22.04/24.04 LTS ou Proxmox VE 8/9 (amd64) :
+Sur Debian 12/13, Ubuntu 22.04/24.04/26.04 LTS ou Proxmox VE 8/9 (amd64) :
 
 ```bash
 curl -fsSL https://joseph02-dev.github.io/corrux/install.sh | sudo sh

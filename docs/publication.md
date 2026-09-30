@@ -66,10 +66,10 @@ Ou, sans terminal : github.com > *Releases* > *Draft a new release* >
 
 Le workflow *Release* :
 
-1. télécharge les composants Python (wheels) pour Python 3.10 à 3.13 ;
+1. télécharge les composants Python (wheels) pour Python 3.10 à 3.14 ;
 2. construit les 4 paquets et le dépôt apt, le signe ;
 3. **installe réellement** la version signée dans des conteneurs
-   Debian 12, Debian 13, Ubuntu 22.04 et Ubuntu 24.04 (install.sh, apt,
+   Debian 12, Debian 13, Ubuntu 22.04, 24.04 et 26.04 (install.sh, apt,
    corrux-setup, connexion HTTPS, désinstallation) — la publication est
    annulée au moindre échec ;
 4. publie le site sur GitHub Pages et crée la GitHub Release.

@@ -36,7 +36,7 @@ jobs:
       fail-fast: false
       matrix:
         # Bornes des versions de Python des distributions supportées.
-        python-version: ["3.10", "3.13"]
+        python-version: ["3.10", "3.14"]
     services:
       postgres:
         image: postgres:16
@@ -73,7 +73,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04"]
+        image: ["debian:12", "debian:13", "ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

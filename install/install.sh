@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://joseph02-dev.github.io/corrux/install.sh | sudo sh
 #
-# Systèmes supportés (amd64) : Debian 12/13, Ubuntu 22.04/24.04 LTS,
+# Systèmes supportés (amd64) : Debian 12/13, Ubuntu 22.04/24.04/26.04 LTS,
 # Proxmox VE 8/9. Le script ne fait qu'ajouter le dépôt apt signé de
 # CORRUX puis installer le paquet `corrux` : tout le reste (compte
 # système, environnement Python, base PostgreSQL) est fait par les
@@ -62,8 +62,8 @@ check_system() {
     fi
 
     case "${os}:${version}" in
-        debian:12|debian:13|ubuntu:22.04|ubuntu:24.04) ;;
-        *) fail "${label} n'est pas supporté (Debian 12/13, Ubuntu 22.04/24.04, Proxmox VE 8/9)." ;;
+        debian:12|debian:13|ubuntu:22.04|ubuntu:24.04|ubuntu:26.04) ;;
+        *) fail "${label} n'est pas supporté (Debian 12/13, Ubuntu 22.04/24.04/26.04, Proxmox VE 8/9)." ;;
     esac
 
     arch="$(dpkg --print-architecture)"
